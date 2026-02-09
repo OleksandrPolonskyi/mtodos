@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+
+# Large local data and artifacts not needed in deployment
+Lurex_price_uk.xlsx
+output
+tmp
+.playwright-cli
+.playwright-mcp
+
+# Local env files (set in Vercel Project Settings instead)
+.env
+.env.*

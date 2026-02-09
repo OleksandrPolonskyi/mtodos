@@ -1,0 +1,41 @@
+- generic [ref=e3]:
+  - img [ref=e4]
+  - generic [ref=e7]:
+    - img [ref=e9]
+    - generic [ref=e17]:
+      - heading "You're almost there..." [level=1] [ref=e18]
+      - generic [ref=e20]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - text: "Please enter your email address to continue:"
+            - textbox "Please enter your email address to continue:" [active] [ref=e26]:
+              - /placeholder: Email address
+          - button "Continue" [disabled]:
+            - generic: Continue
+        - generic [ref=e27]:
+          - button "Continue with Apple ID" [ref=e30] [cursor=pointer]:
+            - generic:
+              - generic:
+                - img
+              - paragraph: Continue with Apple ID
+          - button "Continue with Google" [ref=e33] [cursor=pointer]:
+            - generic:
+              - generic:
+                - img
+              - paragraph: Continue with Google
+          - link "Continue with Single Sign On" [ref=e37] [cursor=pointer]:
+            - /url: /sso/login
+            - generic [ref=e39]:
+              - text: Continue with
+              - generic [ref=e40]: Single Sign On
+      - paragraph [ref=e41]:
+        - text: New to Airtable?
+        - link "Create an account" [ref=e42] [cursor=pointer]:
+          - /url: /signup?continue=%2Fappi0iTXjODNyx2sG%2Ftbl456cqRMlXDzT8N%2Fviw8QpFOjyjdIcijW%3Fblocks%3Dhide
+        - text: instead
+      - paragraph [ref=e43]:
+        - text: Manage your cookie preferences
+        - button "here" [ref=e44] [cursor=pointer]
+    - generic [ref=e47]:
+      - heading "What is Airtable?" [level=5] [ref=e48]
+      - paragraph [ref=e49]: Airtable is a powerful platform for building collaborative apps. Unite, visualize and automate every stream of work with just one application.

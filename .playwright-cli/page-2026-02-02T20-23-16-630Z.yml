@@ -1,0 +1,803 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e238]:
+      - region "View configuration" [ref=e239]:
+        - generic [ref=e240]:
+          - button "Close sidebar" [ref=e241] [cursor=pointer]:
+            - img [ref=e242]
+          - heading "Всі" [level=2] [ref=e244]:
+            - button "Всі" [active] [ref=e245] [cursor=pointer]:
+              - generic [ref=e246]:
+                - img [ref=e248]
+                - generic [ref=e250]: Всі
+                - img [ref=e252]
+        - generic [ref=e254]:
+          - generic [ref=e256]:
+            - generic [ref=e257]:
+              - generic [ref=e258]:
+                - button "Hide fields" [ref=e260]:
+                  - generic [ref=e261] [cursor=pointer]:
+                    - img [ref=e262]
+                    - generic [ref=e264]: Hide fields
+                - button "Filter rows" [ref=e265]:
+                  - generic [ref=e266] [cursor=pointer]:
+                    - img [ref=e267]
+                    - generic [ref=e269]: Filter
+              - generic [ref=e270]:
+                - button "Group rows" [ref=e272]:
+                  - generic [ref=e273] [cursor=pointer]:
+                    - img [ref=e274]
+                    - generic [ref=e276]: Group
+                - button "Sort rows" [ref=e278]:
+                  - generic [ref=e279] [cursor=pointer]:
+                    - img [ref=e280]
+                    - generic [ref=e282]: Sort
+              - button "Row colors" [ref=e283]:
+                - generic [ref=e284] [cursor=pointer]:
+                  - img [ref=e285]
+                  - generic [ref=e287]: Color
+              - button "Row height" [ref=e289]:
+                - img [ref=e291] [cursor=pointer]
+            - button "Share and sync" [ref=e294]:
+              - generic [ref=e295] [cursor=pointer]:
+                - img [ref=e296]
+                - generic [ref=e298]: Share and sync
+          - button "toggle view search input" [ref=e426] [cursor=pointer]:
+            - img [ref=e427]
+      - navigation [ref=e299]:
+        - generic [ref=e300]:
+          - generic [ref=e301]:
+            - button "Create new..." [ref=e302] [cursor=pointer]:
+              - img
+              - generic: Create new...
+            - generic [ref=e306]:
+              - textbox "Find a view" [ref=e307]
+              - img [ref=e308]
+          - generic "View sidebar" [ref=e312]:
+            - listbox [ref=e315]:
+              - option "Всі Menu" [selected] [ref=e316] [cursor=pointer]:
+                - generic [ref=e317]:
+                  - generic [ref=e318]:
+                    - img [ref=e320]
+                    - generic [ref=e322]: Всі
+                  - button "Menu" [ref=e323]:
+                    - img [ref=e324]
+                  - button [ref=e326]:
+                    - img [ref=e327]
+              - option "Жіночі Menu" [ref=e329] [cursor=pointer]:
+                - generic [ref=e330]:
+                  - generic [ref=e331]:
+                    - img [ref=e333]
+                    - generic [ref=e335]: Жіночі
+                  - button "Menu" [ref=e336]:
+                    - img [ref=e337]
+                  - button [ref=e339]:
+                    - img [ref=e340]
+              - option "Чоловічі Menu" [ref=e342] [cursor=pointer]:
+                - generic [ref=e343]:
+                  - generic [ref=e344]:
+                    - img [ref=e346]
+                    - generic [ref=e348]: Чоловічі
+                  - button "Menu" [ref=e349]:
+                    - img [ref=e350]
+                  - button [ref=e352]:
+                    - img [ref=e353]
+              - option "Для генерації Menu" [ref=e355] [cursor=pointer]:
+                - generic [ref=e356]:
+                  - generic [ref=e357]:
+                    - img [ref=e359]
+                    - generic [ref=e361]: Для генерації
+                  - button "Menu" [ref=e362]:
+                    - img [ref=e363]
+                  - button [ref=e365]:
+                    - img [ref=e366]
+        - separator [ref=e368]
+      - main [ref=e369]:
+        - generic [ref=e430]:
+          - generic [ref=e431]:
+            - generic [ref=e432]:
+              - generic [ref=e435]:
+                - img [ref=e439]
+                - generic [ref=e441]:
+                  - generic "Назва column header (Single line text field)" [ref=e443]:
+                    - generic "Single line text" [ref=e444]:
+                      - img [ref=e445]
+                    - generic [ref=e450]: Назва
+                  - button [disabled] [ref=e454]
+              - generic [ref=e1360]:
+                - generic "Insert new record in grid" [ref=e1361] [cursor=pointer]:
+                  - img [ref=e1363]
+                - generic [ref=e1365]:
+                  - generic [ref=e1366]:
+                    - generic [ref=e1368]: "1"
+                    - generic "Row color container" [ref=e1369]
+                    - link "Expand" [ref=e1372] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/rec63PaFwfUDEcY6p?blocks=hide
+                      - img [ref=e1374]
+                  - generic [ref=e1378]: В'язана жіноча кофта з блискавками
+                - generic [ref=e1379]:
+                  - generic [ref=e1380]:
+                    - generic [ref=e1382]: "2"
+                    - generic "Row color container" [ref=e1383]
+                    - link "Expand" [ref=e1386] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recy12VqroOx151cs?blocks=hide
+                      - img [ref=e1388]
+                  - generic [ref=e1392]: Вільна мохерова кофта
+                - generic [ref=e1393]:
+                  - generic [ref=e1394]:
+                    - generic [ref=e1396]: "3"
+                    - generic "Row color container" [ref=e1397]
+                    - link "Expand" [ref=e1400] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recTjcYnaHDMEvZJS?blocks=hide
+                      - img [ref=e1402]
+                  - generic [ref=e1406]: В'язана вільна кофта меланж
+                - generic [ref=e1407]:
+                  - generic [ref=e1408]:
+                    - generic [ref=e1410]: "4"
+                    - generic "Row color container" [ref=e1411]
+                    - link "Expand" [ref=e1414] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recznsRvmZvwFTSq8?blocks=hide
+                      - img [ref=e1416]
+                  - generic [ref=e1420]: Спортивна еластична кофта на блискавці
+                - generic [ref=e1421]:
+                  - generic [ref=e1422]:
+                    - generic [ref=e1424]: "5"
+                    - generic "Row color container" [ref=e1425]
+                    - link "Expand" [ref=e1428] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recM3aZ3SobfxZZL6?blocks=hide
+                      - img [ref=e1430]
+                  - generic [ref=e1434]: Замшева пишна спідниця довжини міді
+                - generic [ref=e1435]:
+                  - generic [ref=e1436]:
+                    - generic [ref=e1438]: "6"
+                    - generic "Row color container" [ref=e1439]
+                    - link "Expand" [ref=e1442] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/rec0GgXglM9Tc5Aib?blocks=hide
+                      - img [ref=e1444]
+                  - generic [ref=e1448]: Спортивні штани палаццо з накладною кишенею
+                - generic [ref=e1449]:
+                  - generic [ref=e1450]:
+                    - generic [ref=e1452]: "7"
+                    - generic "Row color container" [ref=e1453]
+                    - link "Expand" [ref=e1456] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recKsHZPTojyRAdxz?blocks=hide
+                      - img [ref=e1458]
+                  - generic [ref=e1462]: Трикотажний однотонний лонг із переплетом
+                - generic [ref=e1463]:
+                  - generic [ref=e1464]:
+                    - generic [ref=e1466]: "8"
+                    - generic "Row color container" [ref=e1467]
+                    - link "Expand" [ref=e1470] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recOXJthhn4wfh6Jw?blocks=hide
+                      - img [ref=e1472]
+                  - generic [ref=e1476]: Однотонний еластичний лонг
+                - generic [ref=e1477]:
+                  - generic [ref=e1478]:
+                    - generic [ref=e1480]: "9"
+                    - generic "Row color container" [ref=e1481]
+                    - link "Expand" [ref=e1484] [cursor=pointer]:
+                      - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N/viw8QpFOjyjdIcijW/recmoVKOCIx1vYDAq?blocks=hide
+                      - img [ref=e1486]
+                  - generic [ref=e1490]: Трикотажні лосини з начосом
+            - generic [ref=e1491]:
+              - generic: Drag to adjust the number of frozen columns
+            - generic [ref=e456]:
+              - generic [ref=e459]:
+                - button "add a field" [ref=e460] [cursor=pointer]:
+                  - img [ref=e461]
+                - generic [ref=e463]:
+                  - generic "Включити в генерацію column header (Checkbox field)" [ref=e465]:
+                    - generic "Checkbox" [ref=e466]:
+                      - img [ref=e467]
+                    - generic [ref=e472]: Включити в генерацію
+                  - button [disabled] [ref=e476]
+                - generic [ref=e478]:
+                  - generic "Фото товару column header (Attachment field)" [ref=e480]:
+                    - generic "Attachment" [ref=e481]:
+                      - img [ref=e482]
+                    - generic [ref=e487]: Фото товару
+                  - img [ref=e489] [cursor=pointer]
+                  - button [disabled] [ref=e494]
+                - generic [ref=e496]:
+                  - generic "Перед column header (Lookup field)" [ref=e498]:
+                    - generic "Lookup" [ref=e499]:
+                      - img [ref=e500]
+                    - generic [ref=e505]: Перед
+                  - button [disabled] [ref=e509]
+                - generic [ref=e511]:
+                  - generic "Зад column header (Lookup field)" [ref=e513]:
+                    - generic "Lookup" [ref=e514]:
+                      - img [ref=e515]
+                    - generic [ref=e520]: Зад
+                  - button [disabled] [ref=e524]
+                - generic [ref=e526]:
+                  - generic "Перед низ column header (Lookup field)" [ref=e528]:
+                    - generic "Lookup" [ref=e529]:
+                      - img [ref=e530]
+                    - generic [ref=e535]: Перед низ
+                  - button [disabled] [ref=e539]
+                - generic [ref=e541]:
+                  - generic "Зад низ column header (Lookup field)" [ref=e543]:
+                    - generic "Lookup" [ref=e544]:
+                      - img [ref=e545]
+                    - generic [ref=e550]: Зад низ
+                  - button [disabled] [ref=e554]
+                - generic [ref=e556]:
+                  - generic "Доступні кольори column header (Multiple select field)" [ref=e558]:
+                    - generic "Multiple select" [ref=e559]:
+                      - img [ref=e560]
+                    - generic [ref=e565]: Доступні кольори
+                  - button [disabled] [ref=e569]
+                - generic [ref=e571]:
+                  - generic "Всі кольори товару column header (Multiple select field)" [ref=e573]:
+                    - generic "Multiple select" [ref=e574]:
+                      - img [ref=e575]
+                    - generic [ref=e580]: Всі кольори товару
+                  - img [ref=e582] [cursor=pointer]
+                  - button [disabled] [ref=e587]
+                - generic [ref=e589]:
+                  - generic "Розміри column header (Multiple select field)" [ref=e591]:
+                    - generic "Multiple select" [ref=e592]:
+                      - img [ref=e593]
+                    - generic [ref=e598]: Розміри
+                  - button [disabled] [ref=e602]
+                - generic [ref=e604]:
+                  - generic "Постачальник column header (URL field)" [ref=e606]:
+                    - generic "URL" [ref=e607]:
+                      - img [ref=e608]
+                    - generic [ref=e613]: Постачальник
+                  - button [disabled] [ref=e617]
+                - generic [ref=e619]:
+                  - generic "Базова ціна column header (Currency field)" [ref=e621]:
+                    - generic "Currency" [ref=e622]:
+                      - img [ref=e623]
+                    - generic [ref=e628]: Базова ціна
+                  - img [ref=e630] [cursor=pointer]
+                  - button [disabled] [ref=e635]
+                - generic [ref=e637]:
+                  - generic "Моя ціна column header (Number field)" [ref=e639]:
+                    - generic "Number" [ref=e640]:
+                      - img [ref=e641]
+                    - generic [ref=e646]: Моя ціна
+                  - button [disabled] [ref=e650]
+                - generic [ref=e652]:
+                  - generic "Артикул базовий column header (Single line text field)" [ref=e654]:
+                    - generic "Single line text" [ref=e655]:
+                      - img [ref=e656]
+                    - generic [ref=e661]: Артикул базовий
+                  - img [ref=e663] [cursor=pointer]
+                  - button [disabled] [ref=e668]
+                - generic [ref=e670]:
+                  - generic "Бренд column header (Single line text field)" [ref=e672]:
+                    - generic "Single line text" [ref=e673]:
+                      - img [ref=e674]
+                    - generic [ref=e679]: Бренд
+                  - button [disabled] [ref=e683]
+                - generic [ref=e685]:
+                  - generic "Базовий опис column header (Long text field)" [ref=e687]:
+                    - generic "Long text" [ref=e688]:
+                      - img [ref=e689]
+                    - generic [ref=e694]: Базовий опис
+                  - button [disabled] [ref=e698]
+                - generic [ref=e700]:
+                  - generic "Категорія column header (Single select field)" [ref=e702]:
+                    - generic "Single select" [ref=e703]:
+                      - img [ref=e704]
+                    - generic [ref=e709]: Категорія
+                  - button [disabled] [ref=e713]
+                - generic [ref=e715]:
+                  - generic "Гендер column header (Single select field)" [ref=e717]:
+                    - generic "Single select" [ref=e718]:
+                      - img [ref=e719]
+                    - generic [ref=e724]: Гендер
+                  - button [disabled] [ref=e728]
+                - generic [ref=e730]:
+                  - generic "Роль в луці column header (Single select field)" [ref=e732]:
+                    - generic "Single select" [ref=e733]:
+                      - img [ref=e734]
+                    - generic [ref=e739]: Роль в луці
+                  - img [ref=e741] [cursor=pointer]
+                  - button [disabled] [ref=e746]
+                - generic [ref=e748]:
+                  - generic "Сезон column header (Multiple select field)" [ref=e750]:
+                    - generic "Multiple select" [ref=e751]:
+                      - img [ref=e752]
+                    - generic [ref=e757]: Сезон
+                  - img [ref=e759] [cursor=pointer]
+                  - button [disabled] [ref=e764]
+                - generic [ref=e766]:
+                  - generic "Матеріал column header (Multiple select field)" [ref=e768]:
+                    - generic "Multiple select" [ref=e769]:
+                      - img [ref=e770]
+                    - generic [ref=e775]: Матеріал
+                  - img [ref=e777] [cursor=pointer]
+                  - button [disabled] [ref=e782]
+                - generic [ref=e784]:
+                  - generic "Стиль column header (Multiple select field)" [ref=e786]:
+                    - generic "Multiple select" [ref=e787]:
+                      - img [ref=e788]
+                    - generic [ref=e793]: Стиль
+                  - img [ref=e795] [cursor=pointer]
+                  - button [disabled] [ref=e800]
+                - generic [ref=e802]:
+                  - generic "Силует column header (Single select field)" [ref=e804]:
+                    - generic "Single select" [ref=e805]:
+                      - img [ref=e806]
+                    - generic [ref=e811]: Силует
+                  - img [ref=e813] [cursor=pointer]
+                  - button [disabled] [ref=e818]
+                - generic [ref=e820]:
+                  - generic "Layer column header (Single select field)" [ref=e822]:
+                    - generic "Single select" [ref=e823]:
+                      - img [ref=e824]
+                    - generic [ref=e829]: Layer
+                  - img [ref=e831] [cursor=pointer]
+                  - button [disabled] [ref=e836]
+                - generic [ref=e838]:
+                  - generic "Warmth column header (Single select field)" [ref=e840]:
+                    - generic "Single select" [ref=e841]:
+                      - img [ref=e842]
+                    - generic [ref=e847]: Warmth
+                  - img [ref=e849] [cursor=pointer]
+                  - button [disabled] [ref=e854]
+                - generic [ref=e856]:
+                  - generic "Insulation column header (Single select field)" [ref=e858]:
+                    - generic "Single select" [ref=e859]:
+                      - img [ref=e860]
+                    - generic [ref=e865]: Insulation
+                  - img [ref=e867] [cursor=pointer]
+                  - button [disabled] [ref=e872]
+                - generic [ref=e874]:
+                  - generic "Length column header (Single select field)" [ref=e876]:
+                    - generic "Single select" [ref=e877]:
+                      - img [ref=e878]
+                    - generic [ref=e883]: Length
+                  - img [ref=e885] [cursor=pointer]
+                  - button [disabled] [ref=e890]
+                - generic [ref=e892]:
+                  - generic "Neckline/Collar column header (Single select field)" [ref=e894]:
+                    - generic "Single select" [ref=e895]:
+                      - img [ref=e896]
+                    - generic [ref=e901]: Neckline/Collar
+                  - img [ref=e903] [cursor=pointer]
+                  - button [disabled] [ref=e908]
+                - generic [ref=e910]:
+                  - generic "Waist Rise column header (Single select field)" [ref=e912]:
+                    - generic "Single select" [ref=e913]:
+                      - img [ref=e914]
+                    - generic [ref=e919]: Waist Rise
+                  - img [ref=e921] [cursor=pointer]
+                  - button [disabled] [ref=e926]
+                - generic [ref=e928]:
+                  - generic "Texture/Sheen column header (Single select field)" [ref=e930]:
+                    - generic "Single select" [ref=e931]:
+                      - img [ref=e932]
+                    - generic [ref=e937]: Texture/Sheen
+                  - img [ref=e939] [cursor=pointer]
+                  - button [disabled] [ref=e944]
+                - generic [ref=e946]:
+                  - generic "Pattern column header (Single select field)" [ref=e948]:
+                    - generic "Single select" [ref=e949]:
+                      - img [ref=e950]
+                    - generic [ref=e955]: Pattern
+                  - img [ref=e957] [cursor=pointer]
+                  - button [disabled] [ref=e962]
+                - generic [ref=e964]:
+                  - generic "Луки 2 column header (Link to another record field)" [ref=e966]:
+                    - generic "Link to another record" [ref=e967]:
+                      - img [ref=e968]
+                    - generic [ref=e973]: Луки 2
+                  - button [disabled] [ref=e977]
+                - generic [ref=e979]:
+                  - generic "Луки 3 column header (Link to another record field)" [ref=e981]:
+                    - generic "Link to another record" [ref=e982]:
+                      - img [ref=e983]
+                    - generic [ref=e988]: Луки 3
+                  - button [disabled] [ref=e992]
+                - generic [ref=e994]:
+                  - generic "Луки 4 column header (Link to another record field)" [ref=e996]:
+                    - generic "Link to another record" [ref=e997]:
+                      - img [ref=e998]
+                    - generic [ref=e1003]: Луки 4
+                  - button [disabled] [ref=e1007]
+                - generic [ref=e1009]:
+                  - generic "Луки column header (Link to another record field)" [ref=e1011]:
+                    - generic "Link to another record" [ref=e1012]:
+                      - img [ref=e1013]
+                    - generic [ref=e1018]: Луки
+                  - button [disabled] [ref=e1022]
+                - generic [ref=e1024]:
+                  - generic "Дата додавання column header (Date field)" [ref=e1026]:
+                    - generic "Date" [ref=e1027]:
+                      - img [ref=e1028]
+                    - generic [ref=e1033]: Дата додавання
+                  - button [disabled] [ref=e1037]
+              - generic [ref=e1493]:
+                - generic "Insert new record in grid" [ref=e1494] [cursor=pointer]
+                - generic [ref=e1495]:
+                  - checkbox "Включити в генерацію, not checked" [ref=e1498]
+                  - img [ref=e1505]
+                - generic [ref=e1510]:
+                  - checkbox "Включити в генерацію, not checked" [ref=e1513]
+                  - img [ref=e1520]
+                - generic [ref=e1525]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1528]:
+                    - img [ref=e1531] [cursor=pointer]
+                  - img [ref=e1538]
+                  - generic [ref=e1541]:
+                    - img [ref=e1544]
+                    - img [ref=e1547]
+                  - generic [ref=e1550]:
+                    - img [ref=e1553]
+                    - img [ref=e1556]
+                  - generic [ref=e1559]:
+                    - img [ref=e1562]
+                    - img [ref=e1565]
+                  - generic [ref=e1568]:
+                    - img [ref=e1571]
+                    - img [ref=e1574]
+                - generic [ref=e1575]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1578]:
+                    - img [ref=e1581] [cursor=pointer]
+                  - img [ref=e1588]
+                - generic [ref=e1593]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1596]:
+                    - img [ref=e1599] [cursor=pointer]
+                  - img [ref=e1606]
+                  - img [ref=e1612]
+                  - img [ref=e1618]
+                  - img [ref=e1624]
+                  - img [ref=e1630]
+                - generic [ref=e1631]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1634]:
+                    - img [ref=e1637] [cursor=pointer]
+                  - img [ref=e1644]
+                - generic [ref=e1649]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1652]:
+                    - img [ref=e1655] [cursor=pointer]
+                  - img [ref=e1662]
+                  - img [ref=e1668]
+                  - img [ref=e1674]
+                  - img [ref=e1680]
+                  - img [ref=e1686]
+                - generic [ref=e1687]:
+                  - checkbox "Включити в генерацію, checked" [checked] [ref=e1690]:
+                    - img [ref=e1693] [cursor=pointer]
+                  - img [ref=e1700]
+                  - img [ref=e1706]
+                  - img [ref=e1712]
+                  - img [ref=e1718]
+                  - img [ref=e1724]
+                - generic [ref=e1725]:
+                  - checkbox "Включити в генерацію, not checked" [ref=e1728]
+                  - img [ref=e1735]
+          - generic [ref=e1039]:
+            - generic [ref=e1041]:
+              - generic:
+                - generic:
+                  - generic [ref=e1042]:
+                    - generic [ref=e1043]:
+                      - button "Add record" [ref=e1044]:
+                        - img [ref=e1047] [cursor=pointer]
+                      - button "Add more" [ref=e1050]:
+                        - generic [ref=e1051] [cursor=pointer]:
+                          - img [ref=e1052]
+                          - generic [ref=e1055]: Add…
+                    - generic [ref=e1056]: 78 records
+                  - button "Summary" [ref=e1058] [cursor=pointer]:
+                    - generic [ref=e1059]:
+                      - paragraph [ref=e1060]: Summary
+                      - paragraph
+            - generic [ref=e1061]:
+              - generic:
+                - generic:
+                  - generic:
+                    - button "Summary" [ref=e1063] [cursor=pointer]:
+                      - generic [ref=e1064]:
+                        - paragraph [ref=e1065]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1067] [cursor=pointer]:
+                      - generic [ref=e1068]:
+                        - paragraph [ref=e1069]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1071] [cursor=pointer]:
+                      - generic [ref=e1072]:
+                        - paragraph [ref=e1073]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1075] [cursor=pointer]:
+                      - generic [ref=e1076]:
+                        - paragraph [ref=e1077]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1079] [cursor=pointer]:
+                      - generic [ref=e1080]:
+                        - paragraph [ref=e1081]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1083] [cursor=pointer]:
+                      - generic [ref=e1084]:
+                        - paragraph [ref=e1085]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1087] [cursor=pointer]:
+                      - generic [ref=e1088]:
+                        - paragraph [ref=e1089]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1091] [cursor=pointer]:
+                      - generic [ref=e1092]:
+                        - paragraph [ref=e1093]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1095] [cursor=pointer]:
+                      - generic [ref=e1096]:
+                        - paragraph [ref=e1097]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1099] [cursor=pointer]:
+                      - generic [ref=e1100]:
+                        - paragraph [ref=e1101]: Summary
+                        - paragraph
+                    - button "Sum ₴80,337" [ref=e1103] [cursor=pointer]:
+                      - generic [ref=e1104]:
+                        - paragraph [ref=e1105]: Sum
+                        - paragraph [ref=e1106]: ₴80,337
+                    - button "Sum 0.0" [ref=e1108] [cursor=pointer]:
+                      - generic [ref=e1109]:
+                        - paragraph [ref=e1110]: Sum
+                        - paragraph [ref=e1111]: "0.0"
+                    - button "Summary" [ref=e1113] [cursor=pointer]:
+                      - generic [ref=e1114]:
+                        - paragraph [ref=e1115]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1117] [cursor=pointer]:
+                      - generic [ref=e1118]:
+                        - paragraph [ref=e1119]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1121] [cursor=pointer]:
+                      - generic [ref=e1122]:
+                        - paragraph [ref=e1123]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1125] [cursor=pointer]:
+                      - generic [ref=e1126]:
+                        - paragraph [ref=e1127]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1129] [cursor=pointer]:
+                      - generic [ref=e1130]:
+                        - paragraph [ref=e1131]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1133] [cursor=pointer]:
+                      - generic [ref=e1134]:
+                        - paragraph [ref=e1135]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1137] [cursor=pointer]:
+                      - generic [ref=e1138]:
+                        - paragraph [ref=e1139]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1141] [cursor=pointer]:
+                      - generic [ref=e1142]:
+                        - paragraph [ref=e1143]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1145] [cursor=pointer]:
+                      - generic [ref=e1146]:
+                        - paragraph [ref=e1147]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1149] [cursor=pointer]:
+                      - generic [ref=e1150]:
+                        - paragraph [ref=e1151]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1153] [cursor=pointer]:
+                      - generic [ref=e1154]:
+                        - paragraph [ref=e1155]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1157] [cursor=pointer]:
+                      - generic [ref=e1158]:
+                        - paragraph [ref=e1159]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1161] [cursor=pointer]:
+                      - generic [ref=e1162]:
+                        - paragraph [ref=e1163]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1165] [cursor=pointer]:
+                      - generic [ref=e1166]:
+                        - paragraph [ref=e1167]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1169] [cursor=pointer]:
+                      - generic [ref=e1170]:
+                        - paragraph [ref=e1171]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1173] [cursor=pointer]:
+                      - generic [ref=e1174]:
+                        - paragraph [ref=e1175]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1177] [cursor=pointer]:
+                      - generic [ref=e1178]:
+                        - paragraph [ref=e1179]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1181] [cursor=pointer]:
+                      - generic [ref=e1182]:
+                        - paragraph [ref=e1183]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1185] [cursor=pointer]:
+                      - generic [ref=e1186]:
+                        - paragraph [ref=e1187]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1189] [cursor=pointer]:
+                      - generic [ref=e1190]:
+                        - paragraph [ref=e1191]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1193] [cursor=pointer]:
+                      - generic [ref=e1194]:
+                        - paragraph [ref=e1195]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1197] [cursor=pointer]:
+                      - generic [ref=e1198]:
+                        - paragraph [ref=e1199]: Summary
+                        - paragraph
+                    - button "Summary" [ref=e1201] [cursor=pointer]:
+                      - generic [ref=e1202]:
+                        - paragraph [ref=e1203]: Summary
+                        - paragraph
+    - complementary [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - link "Back to home" [ref=e22] [cursor=pointer]:
+            - /url: /
+            - img [ref=e25]
+            - img [ref=e32]
+          - button "Open Omni" [ref=e378] [cursor=pointer]:
+            - img [ref=e381]
+        - generic [ref=e34]:
+          - button "Help menu" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+          - button "No unseen notifications" [ref=e38] [cursor=pointer]:
+            - img [ref=e43]
+          - button "Account" [ref=e46] [cursor=pointer]:
+            - img [ref=e50]:
+              - generic [ref=e51]: O
+    - generic [ref=e419]:
+      - banner [ref=e421]:
+        - generic [ref=e52]:
+          - generic [ref=e54]:
+            - img [ref=e57]
+            - button "Open base settings menu" [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]: Moddyland
+              - img [ref=e65]
+          - list [ref=e67]:
+            - listitem [ref=e68]:
+              - link "Data" [ref=e69] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG
+                - paragraph [ref=e70]: Data
+            - listitem [ref=e72]:
+              - link "Automations" [ref=e73] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/automations
+                - paragraph [ref=e74]: Automations
+            - listitem [ref=e75]:
+              - link "Interfaces" [ref=e76] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/interfaces?origin=topnav
+                - paragraph [ref=e77]: Interfaces
+            - listitem [ref=e78]:
+              - link "Forms" [ref=e79] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/forms?origin=topnav
+                - paragraph [ref=e80]: Forms
+          - generic [ref=e83]:
+            - button "Base history" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+            - button "Upgrade" [ref=e87] [cursor=pointer]:
+              - img [ref=e88]
+              - text: Upgrade
+            - button "Launch" [ref=e90] [cursor=pointer]:
+              - img
+              - generic: Launch
+            - button "Share" [ref=e91] [cursor=pointer]:
+              - generic [ref=e92]: Share
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - navigation "Tables" [ref=e97]:
+            - generic [ref=e101] [cursor=pointer]:
+              - link "Луки" [ref=e102]:
+                - /url: /appi0iTXjODNyx2sG/tblOTxql5GXahUn6d?blocks=hide
+                - generic [ref=e103]: Луки
+              - button "Луки table description" [ref=e105]:
+                - img [ref=e106]
+            - generic [ref=e111] [cursor=pointer]:
+              - link "Товари" [ref=e112]:
+                - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N?blocks=hide
+                - generic [ref=e113]: Товари
+              - generic [ref=e114]:
+                - button "Товари table description" [ref=e115]:
+                  - img [ref=e116]
+                - button "Товари table options" [ref=e118]:
+                  - img [ref=e119]
+            - generic [ref=e124] [cursor=pointer]:
+              - link "Instagram Direct" [ref=e125]:
+                - /url: /appi0iTXjODNyx2sG/tbltdDN0YYNrOzw5b?blocks=hide
+                - generic [ref=e126]: Instagram Direct
+              - button "Instagram Direct table description" [ref=e128]:
+                - img [ref=e129]
+            - link "Постачальники товару" [ref=e136] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/tblQfbb4RG5LyfZKi?blocks=hide
+              - generic [ref=e137]: Постачальники товару
+            - link "Операційні постачальники" [ref=e143] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/tblIqbMBeieVvnVmF?blocks=hide
+              - generic [ref=e144]: Операційні постачальники
+            - generic [ref=e149] [cursor=pointer]:
+              - link "Аутсорс послуги" [ref=e150]:
+                - /url: /appi0iTXjODNyx2sG/tblIMU3hNI9hUAgEb?blocks=hide
+                - generic [ref=e151]: Аутсорс послуги
+              - button "Аутсорс послуги table description" [ref=e153]:
+                - img [ref=e154]
+            - generic [ref=e160] [cursor=pointer]:
+              - link "Разові витрати" [ref=e161]:
+                - /url: /appi0iTXjODNyx2sG/tbl4ZrjMJJWLDcUrj?blocks=hide
+                - generic [ref=e162]: Разові витрати
+              - button "Разові витрати table description" [ref=e164]:
+                - img [ref=e165]
+            - generic [ref=e171] [cursor=pointer]:
+              - link "Циклічні витрати (підписки)" [ref=e172]:
+                - /url: /appi0iTXjODNyx2sG/tbl6yPRDS9MzVyfwX?blocks=hide
+                - generic [ref=e173]: Циклічні витрати (підписки)
+              - button "Циклічні витрати (підписки) table description" [ref=e175]:
+                - img [ref=e176]
+            - generic [ref=e182] [cursor=pointer]:
+              - link "Витрати на аутсорс" [ref=e183]:
+                - /url: /appi0iTXjODNyx2sG/tbl2YoduhbqPpxgHJ?blocks=hide
+                - generic [ref=e184]: Витрати на аутсорс
+              - button "Витрати на аутсорс table description" [ref=e186]:
+                - img [ref=e187]
+            - link "Податки ФОП 2" [ref=e194] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/tblUvCsVoodEtjw8H?blocks=hide
+              - generic [ref=e195]: Податки ФОП 2
+            - link "Дослідження" [ref=e201] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/tblFtKhgqOh9012Eq?blocks=hide
+              - generic [ref=e202]: Дослідження
+            - generic [ref=e207] [cursor=pointer]:
+              - link "Лог дій" [ref=e208]:
+                - /url: /appi0iTXjODNyx2sG/tblfq3AEo1N3bKE70?blocks=hide
+                - generic [ref=e209]: Лог дій
+              - button "Лог дій table description" [ref=e211]:
+                - img [ref=e212]
+          - button "Scroll tables right" [ref=e215] [cursor=pointer]:
+            - img [ref=e216]
+        - generic [ref=e218]:
+          - button "Search all tables" [ref=e220] [cursor=pointer]:
+            - img [ref=e221]
+          - button "Add or import table" [ref=e224] [cursor=pointer]:
+            - img [ref=e225]
+        - button "Tools" [ref=e231] [cursor=pointer]:
+          - generic [ref=e232]: Tools
+          - img [ref=e233]
+    - generic [ref=e1741]: Preparing CSV for download…
+  - log [ref=e1318]
+  - log [ref=e1319]
+  - log [ref=e1320]
+  - log [ref=e1321]
+  - log [ref=e1322]
+  - log [ref=e1323]
+  - log [ref=e1324]
+  - log [ref=e1325]
+  - log [ref=e1326]
+  - log [ref=e1327]
+  - log [ref=e1328]
+  - log [ref=e1329]
+  - log [ref=e1330]
+  - log [ref=e1331]
+  - log [ref=e1332]
+  - log [ref=e1333]
+  - log [ref=e1334]
+  - log [ref=e1335]
+  - log [ref=e1336]
+  - log [ref=e1337]
+  - log [ref=e1338]
+  - log [ref=e1339]
+  - log [ref=e1340]
+  - log [ref=e1341]
+  - log [ref=e1342]
+  - log [ref=e1343]
+  - log [ref=e1344]
+  - log [ref=e1345]
+  - log [ref=e1346]
+  - log [ref=e1347]
+  - log [ref=e1348]
+  - log [ref=e1349]
+  - log [ref=e1350]
+  - log [ref=e1351]
+  - log [ref=e1352]
+  - log [ref=e1353]
+  - log [ref=e1354]
+  - log [ref=e1355]
+  - log [ref=e1356]

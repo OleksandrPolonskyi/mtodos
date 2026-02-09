@@ -1,0 +1,132 @@
+- generic [ref=e3]:
+  - generic [ref=e8]:
+    - banner [ref=e9]
+    - main [ref=e12]:
+      - img [ref=e13]
+  - complementary [ref=e18]:
+    - generic [ref=e19]:
+      - link "Back to home" [ref=e22] [cursor=pointer]:
+        - /url: /
+        - img [ref=e25]
+        - img [ref=e32]
+      - generic [ref=e34]:
+        - button "Help menu" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+        - button "No unseen notifications" [ref=e38] [cursor=pointer]:
+          - img [ref=e43]
+        - button "Account" [ref=e46] [cursor=pointer]:
+          - img [ref=e50]:
+            - generic [ref=e51]: O
+  - generic:
+    - generic:
+      - banner:
+        - generic [ref=e52]:
+          - generic [ref=e54]:
+            - img [ref=e57]
+            - button "Open base settings menu" [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]: Moddyland
+              - img [ref=e65]
+          - list [ref=e67]:
+            - listitem [ref=e68]:
+              - link "Data" [ref=e69] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG
+                - paragraph [ref=e70]: Data
+            - listitem [ref=e72]:
+              - link "Automations" [ref=e73] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/automations
+                - paragraph [ref=e74]: Automations
+            - listitem [ref=e75]:
+              - link "Interfaces" [ref=e76] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/interfaces?origin=topnav
+                - paragraph [ref=e77]: Interfaces
+            - listitem [ref=e78]:
+              - link "Forms" [ref=e79] [cursor=pointer]:
+                - /url: /appi0iTXjODNyx2sG/forms?origin=topnav
+                - paragraph [ref=e80]: Forms
+          - generic [ref=e83]:
+            - button "Base history" [ref=e84] [cursor=pointer]:
+              - img [ref=e85]
+            - button "Upgrade" [ref=e87] [cursor=pointer]:
+              - img [ref=e88]
+              - text: Upgrade
+            - button "Launch" [ref=e90] [cursor=pointer]:
+              - img
+              - generic: Launch
+            - button "Share" [ref=e91] [cursor=pointer]:
+              - generic [ref=e92]: Share
+    - generic [ref=e93]:
+      - generic [ref=e94]:
+        - navigation "Tables" [ref=e97]:
+          - generic [ref=e101] [cursor=pointer]:
+            - link "Луки" [ref=e102]:
+              - /url: /appi0iTXjODNyx2sG/tblOTxql5GXahUn6d?blocks=hide
+              - generic [ref=e103]: Луки
+            - button "Луки table description" [ref=e105]:
+              - img [ref=e106]
+          - generic [ref=e111] [cursor=pointer]:
+            - link "Товари" [ref=e112]:
+              - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N?blocks=hide
+              - generic [ref=e113]: Товари
+            - generic [ref=e114]:
+              - button "Товари table description" [ref=e115]:
+                - img [ref=e116]
+              - button "Товари table options" [ref=e118]:
+                - img [ref=e119]
+          - generic [ref=e124] [cursor=pointer]:
+            - link "Instagram Direct" [ref=e125]:
+              - /url: /appi0iTXjODNyx2sG/tbltdDN0YYNrOzw5b?blocks=hide
+              - generic [ref=e126]: Instagram Direct
+            - button "Instagram Direct table description" [ref=e128]:
+              - img [ref=e129]
+          - link "Постачальники товару" [ref=e136] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblQfbb4RG5LyfZKi?blocks=hide
+            - generic [ref=e137]: Постачальники товару
+          - link "Операційні постачальники" [ref=e143] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblIqbMBeieVvnVmF?blocks=hide
+            - generic [ref=e144]: Операційні постачальники
+          - generic [ref=e149] [cursor=pointer]:
+            - link "Аутсорс послуги" [ref=e150]:
+              - /url: /appi0iTXjODNyx2sG/tblIMU3hNI9hUAgEb?blocks=hide
+              - generic [ref=e151]: Аутсорс послуги
+            - button "Аутсорс послуги table description" [ref=e153]:
+              - img [ref=e154]
+          - generic [ref=e160] [cursor=pointer]:
+            - link "Разові витрати" [ref=e161]:
+              - /url: /appi0iTXjODNyx2sG/tbl4ZrjMJJWLDcUrj?blocks=hide
+              - generic [ref=e162]: Разові витрати
+            - button "Разові витрати table description" [ref=e164]:
+              - img [ref=e165]
+          - generic [ref=e171] [cursor=pointer]:
+            - link "Циклічні витрати (підписки)" [ref=e172]:
+              - /url: /appi0iTXjODNyx2sG/tbl6yPRDS9MzVyfwX?blocks=hide
+              - generic [ref=e173]: Циклічні витрати (підписки)
+            - button "Циклічні витрати (підписки) table description" [ref=e175]:
+              - img [ref=e176]
+          - generic [ref=e182] [cursor=pointer]:
+            - link "Витрати на аутсорс" [ref=e183]:
+              - /url: /appi0iTXjODNyx2sG/tbl2YoduhbqPpxgHJ?blocks=hide
+              - generic [ref=e184]: Витрати на аутсорс
+            - button "Витрати на аутсорс table description" [ref=e186]:
+              - img [ref=e187]
+          - link "Податки ФОП 2" [ref=e194] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblUvCsVoodEtjw8H?blocks=hide
+            - generic [ref=e195]: Податки ФОП 2
+          - link "Дослідження" [ref=e201] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblFtKhgqOh9012Eq?blocks=hide
+            - generic [ref=e202]: Дослідження
+          - generic [ref=e207] [cursor=pointer]:
+            - link "Лог дій" [ref=e208]:
+              - /url: /appi0iTXjODNyx2sG/tblfq3AEo1N3bKE70?blocks=hide
+              - generic [ref=e209]: Лог дій
+            - button "Лог дій table description" [ref=e211]:
+              - img [ref=e212]
+        - button "Scroll tables right" [ref=e215] [cursor=pointer]:
+          - img [ref=e216]
+      - generic [ref=e218]:
+        - button "Search all tables" [ref=e220] [cursor=pointer]:
+          - img [ref=e221]
+        - button "Add or import table" [ref=e224] [cursor=pointer]:
+          - img [ref=e225]
+      - button "Tools" [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]: Tools
+        - img [ref=e233]

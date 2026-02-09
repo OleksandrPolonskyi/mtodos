@@ -1,0 +1,220 @@
+- generic [ref=e3]:
+  - generic [ref=e238]:
+    - region "View configuration" [ref=e239]:
+      - generic [ref=e240]:
+        - button "Close sidebar" [ref=e241] [cursor=pointer]:
+          - img [ref=e242]
+        - heading "Всі" [level=2] [ref=e244]:
+          - button "Всі" [ref=e245] [cursor=pointer]:
+            - generic [ref=e246]:
+              - img [ref=e248]
+              - generic [ref=e250]: Всі
+              - img [ref=e252]
+      - generic [ref=e256]:
+        - generic [ref=e257]:
+          - generic [ref=e258]:
+            - button "Hide fields" [ref=e260]:
+              - generic [ref=e261] [cursor=pointer]:
+                - img [ref=e262]
+                - generic [ref=e264]: Hide fields
+            - button "Filter rows" [ref=e265]:
+              - generic [ref=e266] [cursor=pointer]:
+                - img [ref=e267]
+                - generic [ref=e269]: Filter
+          - generic [ref=e270]:
+            - button "Group rows" [ref=e272]:
+              - generic [ref=e273] [cursor=pointer]:
+                - img [ref=e274]
+                - generic [ref=e276]: Group
+            - button "Sort rows" [ref=e278]:
+              - generic [ref=e279] [cursor=pointer]:
+                - img [ref=e280]
+                - generic [ref=e282]: Sort
+          - button "Row colors" [ref=e283]:
+            - generic [ref=e284] [cursor=pointer]:
+              - img [ref=e285]
+              - generic [ref=e287]: Color
+          - button "Row height" [ref=e289]:
+            - img [ref=e291] [cursor=pointer]
+        - button "Share and sync" [ref=e294]:
+          - generic [ref=e295] [cursor=pointer]:
+            - img [ref=e296]
+            - generic [ref=e298]: Share and sync
+    - navigation [ref=e299]:
+      - generic [ref=e300]:
+        - generic [ref=e301]:
+          - button "Create new..." [ref=e302] [cursor=pointer]:
+            - img
+            - generic: Create new...
+          - generic [ref=e306]:
+            - textbox "Find a view" [ref=e307]
+            - img [ref=e308]
+        - generic "View sidebar" [ref=e312]:
+          - listbox [ref=e315]:
+            - option "Всі Menu" [selected] [ref=e316] [cursor=pointer]:
+              - generic [ref=e317]:
+                - generic [ref=e318]:
+                  - img [ref=e320]
+                  - generic [ref=e322]: Всі
+                - button "Menu" [ref=e323]:
+                  - img [ref=e324]
+                - button [ref=e326]:
+                  - img [ref=e327]
+            - option "Жіночі Menu" [ref=e329] [cursor=pointer]:
+              - generic [ref=e330]:
+                - generic [ref=e331]:
+                  - img [ref=e333]
+                  - generic [ref=e335]: Жіночі
+                - button "Menu" [ref=e336]:
+                  - img [ref=e337]
+                - button [ref=e339]:
+                  - img [ref=e340]
+            - option "Чоловічі Menu" [ref=e342] [cursor=pointer]:
+              - generic [ref=e343]:
+                - generic [ref=e344]:
+                  - img [ref=e346]
+                  - generic [ref=e348]: Чоловічі
+                - button "Menu" [ref=e349]:
+                  - img [ref=e350]
+                - button [ref=e352]:
+                  - img [ref=e353]
+            - option "Для генерації Menu" [ref=e355] [cursor=pointer]:
+              - generic [ref=e356]:
+                - generic [ref=e357]:
+                  - img [ref=e359]
+                  - generic [ref=e361]: Для генерації
+                - button "Menu" [ref=e362]:
+                  - img [ref=e363]
+                - button [ref=e365]:
+                  - img [ref=e366]
+      - separator [ref=e368]
+    - main [ref=e369]
+  - complementary [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - link "Back to home" [ref=e22] [cursor=pointer]:
+          - /url: /
+          - img [ref=e25]
+          - img [ref=e32]
+        - button "Open Omni" [ref=e378] [cursor=pointer]:
+          - img [ref=e381]
+      - generic [ref=e34]:
+        - button "Help menu" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+        - button "No unseen notifications" [ref=e38] [cursor=pointer]:
+          - img [ref=e43]
+        - button "Account" [ref=e46] [cursor=pointer]:
+          - img [ref=e50]:
+            - generic [ref=e51]: O
+  - generic [ref=e419]:
+    - banner [ref=e421]:
+      - generic [ref=e52]:
+        - generic [ref=e54]:
+          - img [ref=e57]
+          - button "Open base settings menu" [ref=e63] [cursor=pointer]:
+            - generic [ref=e64]: Moddyland
+            - img [ref=e65]
+        - list [ref=e67]:
+          - listitem [ref=e68]:
+            - link "Data" [ref=e69] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG
+              - paragraph [ref=e70]: Data
+          - listitem [ref=e72]:
+            - link "Automations" [ref=e73] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/automations
+              - paragraph [ref=e74]: Automations
+          - listitem [ref=e75]:
+            - link "Interfaces" [ref=e76] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/interfaces?origin=topnav
+              - paragraph [ref=e77]: Interfaces
+          - listitem [ref=e78]:
+            - link "Forms" [ref=e79] [cursor=pointer]:
+              - /url: /appi0iTXjODNyx2sG/forms?origin=topnav
+              - paragraph [ref=e80]: Forms
+        - generic [ref=e83]:
+          - button "Base history" [ref=e84] [cursor=pointer]:
+            - img [ref=e85]
+          - button "Upgrade" [ref=e87] [cursor=pointer]:
+            - img [ref=e88]
+            - text: Upgrade
+          - button "Launch" [ref=e90] [cursor=pointer]:
+            - img
+            - generic: Launch
+          - button "Share" [ref=e91] [cursor=pointer]:
+            - generic [ref=e92]: Share
+    - generic [ref=e93]:
+      - generic [ref=e94]:
+        - navigation "Tables" [ref=e97]:
+          - generic [ref=e101] [cursor=pointer]:
+            - link "Луки" [ref=e102]:
+              - /url: /appi0iTXjODNyx2sG/tblOTxql5GXahUn6d?blocks=hide
+              - generic [ref=e103]: Луки
+            - button "Луки table description" [ref=e105]:
+              - img [ref=e106]
+          - generic [ref=e111] [cursor=pointer]:
+            - link "Товари" [ref=e112]:
+              - /url: /appi0iTXjODNyx2sG/tbl456cqRMlXDzT8N?blocks=hide
+              - generic [ref=e113]: Товари
+            - generic [ref=e114]:
+              - button "Товари table description" [ref=e115]:
+                - img [ref=e116]
+              - button "Товари table options" [ref=e118]:
+                - img [ref=e119]
+          - generic [ref=e124] [cursor=pointer]:
+            - link "Instagram Direct" [ref=e125]:
+              - /url: /appi0iTXjODNyx2sG/tbltdDN0YYNrOzw5b?blocks=hide
+              - generic [ref=e126]: Instagram Direct
+            - button "Instagram Direct table description" [ref=e128]:
+              - img [ref=e129]
+          - link "Постачальники товару" [ref=e136] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblQfbb4RG5LyfZKi?blocks=hide
+            - generic [ref=e137]: Постачальники товару
+          - link "Операційні постачальники" [ref=e143] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblIqbMBeieVvnVmF?blocks=hide
+            - generic [ref=e144]: Операційні постачальники
+          - generic [ref=e149] [cursor=pointer]:
+            - link "Аутсорс послуги" [ref=e150]:
+              - /url: /appi0iTXjODNyx2sG/tblIMU3hNI9hUAgEb?blocks=hide
+              - generic [ref=e151]: Аутсорс послуги
+            - button "Аутсорс послуги table description" [ref=e153]:
+              - img [ref=e154]
+          - generic [ref=e160] [cursor=pointer]:
+            - link "Разові витрати" [ref=e161]:
+              - /url: /appi0iTXjODNyx2sG/tbl4ZrjMJJWLDcUrj?blocks=hide
+              - generic [ref=e162]: Разові витрати
+            - button "Разові витрати table description" [ref=e164]:
+              - img [ref=e165]
+          - generic [ref=e171] [cursor=pointer]:
+            - link "Циклічні витрати (підписки)" [ref=e172]:
+              - /url: /appi0iTXjODNyx2sG/tbl6yPRDS9MzVyfwX?blocks=hide
+              - generic [ref=e173]: Циклічні витрати (підписки)
+            - button "Циклічні витрати (підписки) table description" [ref=e175]:
+              - img [ref=e176]
+          - generic [ref=e182] [cursor=pointer]:
+            - link "Витрати на аутсорс" [ref=e183]:
+              - /url: /appi0iTXjODNyx2sG/tbl2YoduhbqPpxgHJ?blocks=hide
+              - generic [ref=e184]: Витрати на аутсорс
+            - button "Витрати на аутсорс table description" [ref=e186]:
+              - img [ref=e187]
+          - link "Податки ФОП 2" [ref=e194] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblUvCsVoodEtjw8H?blocks=hide
+            - generic [ref=e195]: Податки ФОП 2
+          - link "Дослідження" [ref=e201] [cursor=pointer]:
+            - /url: /appi0iTXjODNyx2sG/tblFtKhgqOh9012Eq?blocks=hide
+            - generic [ref=e202]: Дослідження
+          - generic [ref=e207] [cursor=pointer]:
+            - link "Лог дій" [ref=e208]:
+              - /url: /appi0iTXjODNyx2sG/tblfq3AEo1N3bKE70?blocks=hide
+              - generic [ref=e209]: Лог дій
+            - button "Лог дій table description" [ref=e211]:
+              - img [ref=e212]
+        - button "Scroll tables right" [ref=e215] [cursor=pointer]:
+          - img [ref=e216]
+      - generic [ref=e218]:
+        - button "Search all tables" [ref=e220] [cursor=pointer]:
+          - img [ref=e221]
+        - button "Add or import table" [ref=e224] [cursor=pointer]:
+          - img [ref=e225]
+      - button "Tools" [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]: Tools
+        - img [ref=e233]
