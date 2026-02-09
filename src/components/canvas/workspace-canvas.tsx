@@ -61,7 +61,7 @@ interface WorkspaceCanvasProps {
 
 type WorkspaceViewMode = "canvas" | "list";
 type TaskListSortMode = "due_date" | "status" | "custom";
-type TaskListScope = "active" | "completed";
+type TaskListScope = "active" | "completed" | "flow";
 type AnchorSide = "left" | "right" | "top" | "bottom";
 
 interface LinkDraftState {
@@ -81,6 +81,7 @@ interface VisualEdge {
   sourceBlockId: string;
   targetBlockId: string;
   kind: VisualEdgeKind;
+  step: number | null;
 }
 
 const CARD_WIDTH = 272;
@@ -809,6 +810,157 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     return tones;
   }, [tasks]);
 
+  const flowInsights = useMemo(() => {
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    const outgoing = new Map<string, string[]>();
+    const indegree = new Map<string, number>();
+
+    for (const task of tasks) {
+      outgoing.set(task.id, []);
+      indegree.set(task.id, 0);
+    }
+
+    for (const task of tasks) {
+      if (!task.dependsOnTaskId) {
+        continue;
+      }
+
+      const prerequisite = tasksById.get(task.dependsOnTaskId);
+      if (!prerequisite || prerequisite.id === task.id) {
+        continue;
+      }
+
+      outgoing.get(prerequisite.id)?.push(task.id);
+      indegree.set(task.id, (indegree.get(task.id) ?? 0) + 1);
+    }
+
+    for (const [taskId, children] of outgoing) {
+      children.sort((a, b) => {
+        const left = tasksById.get(a);
+        const right = tasksById.get(b);
+        if (!left || !right) {
+          return 0;
+        }
+        return left.order - right.order || left.updatedAt.localeCompare(right.updatedAt);
+      });
+      outgoing.set(taskId, children);
+    }
+
+    const roots = tasks
+      .filter((task) => (indegree.get(task.id) ?? 0) === 0 && (outgoing.get(task.id)?.length ?? 0) > 0)
+      .sort((a, b) => a.order - b.order || a.updatedAt.localeCompare(b.updatedAt));
+
+    const fallbackRoots =
+      roots.length > 0
+        ? roots
+        : tasks
+            .filter((task) => (outgoing.get(task.id)?.length ?? 0) > 0)
+            .sort((a, b) => a.order - b.order || a.updatedAt.localeCompare(b.updatedAt));
+
+    const chains: string[][] = [];
+
+    const walk = (taskId: string, path: string[], visited: Set<string>): void => {
+      const children = outgoing.get(taskId) ?? [];
+
+      if (children.length === 0) {
+        if (path.length > 1) {
+          chains.push(path);
+        }
+        return;
+      }
+
+      let progressed = false;
+
+      for (const childId of children) {
+        if (visited.has(childId)) {
+          continue;
+        }
+
+        progressed = true;
+        const nextVisited = new Set(visited);
+        nextVisited.add(childId);
+        walk(childId, [...path, childId], nextVisited);
+      }
+
+      if (!progressed && path.length > 1) {
+        chains.push(path);
+      }
+    };
+
+    for (const root of fallbackRoots) {
+      walk(root.id, [root.id], new Set([root.id]));
+    }
+
+    const uniqueChains = Array.from(new Set(chains.map((chain) => chain.join("::")))).map((serialized) =>
+      serialized.split("::")
+    );
+
+    if (uniqueChains.length === 0) {
+      for (const task of tasks) {
+        if (!task.dependsOnTaskId) {
+          continue;
+        }
+        const prerequisite = tasksById.get(task.dependsOnTaskId);
+        if (!prerequisite || prerequisite.id === task.id) {
+          continue;
+        }
+        uniqueChains.push([prerequisite.id, task.id]);
+      }
+    }
+
+    const taskEdgeStep = new Map<string, number>();
+
+    for (const chain of uniqueChains) {
+      for (let index = 1; index < chain.length; index += 1) {
+        const edgeKey = `${chain[index - 1]}::${chain[index]}`;
+        const step = index;
+        const current = taskEdgeStep.get(edgeKey);
+        taskEdgeStep.set(edgeKey, current ? Math.min(current, step) : step);
+      }
+    }
+
+    return { chains: uniqueChains, taskEdgeStep };
+  }, [tasks]);
+
+  const flowChainsForList = useMemo(() => {
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+
+    return flowInsights.chains
+      .map((chain, chainIndex) => {
+        const steps = chain
+          .map((taskId) => tasksById.get(taskId))
+          .filter((task): task is TaskItem => task !== undefined)
+          .map((task) => {
+            const dependencyTask = task.dependsOnTaskId
+              ? tasksById.get(task.dependsOnTaskId) ?? null
+              : null;
+            const dependencyBlock = dependencyTask
+              ? blocksById.get(dependencyTask.blockId) ?? null
+              : null;
+            const computedStatus: TaskStatus = dependencyBlockedTaskIds.has(task.id)
+              ? "blocked"
+              : task.status;
+
+            return {
+              task,
+              computedStatus,
+              dueTone: getTaskDueTone(task),
+              block: blocksById.get(task.blockId) ?? null,
+              dependencyTask,
+              dependencyBlock
+            };
+          })
+          .filter((step) => step.block !== null);
+
+        return {
+          id: `flow-${chainIndex + 1}`,
+          steps
+        };
+      })
+      .filter((flow) => flow.steps.length > 1)
+      .sort((left, right) => right.steps.length - left.steps.length);
+  }, [blocksById, dependencyBlockedTaskIds, flowInsights.chains, tasks]);
+
   const sortedTasksForList = useMemo(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     const manualOrderIndex = new Map(taskListManualOrder.map((id, index) => [id, index]));
@@ -837,6 +989,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       })
       .filter((item) => {
         if (!item.block) {
+          return false;
+        }
+
+        if (taskListScope === "flow") {
           return false;
         }
 
@@ -1076,6 +1232,58 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     []
   );
 
+  const getConnectorMidPoint = useCallback(
+    (
+      start: { x: number; y: number },
+      end: { x: number; y: number },
+      sourceSide: AnchorSide
+    ): { x: number; y: number } => {
+      const t = 0.5;
+      const mt = 1 - t;
+
+      if (sourceSide === "left" || sourceSide === "right") {
+        const dx = end.x - start.x;
+        const horizontalDirection = sourceSide === "right" ? 1 : -1;
+        const curve = Math.min(56, Math.max(24, Math.abs(dx) * 0.22));
+        const c1 = { x: start.x + horizontalDirection * curve, y: start.y };
+        const c2 = { x: end.x - horizontalDirection * curve, y: end.y };
+
+        return {
+          x:
+            mt * mt * mt * start.x +
+            3 * mt * mt * t * c1.x +
+            3 * mt * t * t * c2.x +
+            t * t * t * end.x,
+          y:
+            mt * mt * mt * start.y +
+            3 * mt * mt * t * c1.y +
+            3 * mt * t * t * c2.y +
+            t * t * t * end.y
+        };
+      }
+
+      const dy = end.y - start.y;
+      const verticalDirection = sourceSide === "bottom" ? 1 : -1;
+      const curve = Math.min(56, Math.max(24, Math.abs(dy) * 0.22));
+      const c1 = { x: start.x, y: start.y + verticalDirection * curve };
+      const c2 = { x: end.x, y: end.y - verticalDirection * curve };
+
+      return {
+        x:
+          mt * mt * mt * start.x +
+          3 * mt * mt * t * c1.x +
+          3 * mt * t * t * c2.x +
+          t * t * t * end.x,
+        y:
+          mt * mt * mt * start.y +
+          3 * mt * mt * t * c1.y +
+          3 * mt * t * t * c2.y +
+          t * t * t * end.y
+      };
+    },
+    []
+  );
+
   const chooseConnectorSides = useCallback(
     (sourceBlockId: string, targetBlockId: string): { sourceSide: AnchorSide; targetSide: AnchorSide } => {
       const source = positionedMap.get(sourceBlockId);
@@ -1129,7 +1337,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       id: edge.id,
       sourceBlockId: edge.sourceBlockId,
       targetBlockId: edge.targetBlockId,
-      kind: "manual" as const
+      kind: "manual" as const,
+      step: null
     }));
 
     const existingPairs = new Set(
@@ -1152,7 +1361,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       const sourceBlockId = dependencyTask.blockId;
       const targetBlockId = task.blockId;
       const pairKey = `${sourceBlockId}::${targetBlockId}`;
-      if (existingPairs.has(pairKey) || autoEdgesByPair.has(pairKey)) {
+      const edgeStep = flowInsights.taskEdgeStep.get(`${dependencyTask.id}::${task.id}`) ?? 1;
+
+      if (existingPairs.has(pairKey)) {
+        continue;
+      }
+
+      const existingAuto = autoEdgesByPair.get(pairKey);
+      if (existingAuto) {
+        autoEdgesByPair.set(pairKey, {
+          ...existingAuto,
+          step: existingAuto.step ? Math.min(existingAuto.step, edgeStep) : edgeStep
+        });
         continue;
       }
 
@@ -1160,12 +1380,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         id: `task-link:${pairKey}`,
         sourceBlockId,
         targetBlockId,
-        kind: "task_dependency"
+        kind: "task_dependency",
+        step: edgeStep
       });
     }
 
     return [...manualEdges, ...autoEdgesByPair.values()];
-  }, [edges, tasks]);
+  }, [edges, flowInsights.taskEdgeStep, tasks]);
 
   const edgePaths = useMemo(() => {
     return visualEdges
@@ -1180,16 +1401,20 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           return null;
         }
         const d = buildConnectorPath(start, end, sourceSide);
+        const midpoint = getConnectorMidPoint(start, end, sourceSide);
 
         return {
           id: edge.id,
           kind: edge.kind,
+          step: edge.step,
           d,
           blocked: edge.kind === "manual" ? blockedMap[edge.sourceBlockId] ?? false : false,
           startX: start.x,
           startY: start.y,
           endX: end.x,
-          endY: end.y
+          endY: end.y,
+          midX: midpoint.x,
+          midY: midpoint.y
         };
       })
       .filter(
@@ -1198,12 +1423,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         ): item is {
           id: string;
           kind: VisualEdgeKind;
+          step: number | null;
           d: string;
           blocked: boolean;
           startX: number;
           startY: number;
           endX: number;
           endY: number;
+          midX: number;
+          midY: number;
         } => item !== null
       );
   }, [
@@ -1211,6 +1439,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     buildConnectorPath,
     chooseConnectorSides,
     edgeAnchorOverrides,
+    getConnectorMidPoint,
     getAnchorPoint,
     visualEdges
   ]);
@@ -2186,6 +2415,30 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             : 0.75
                       }
                     />
+                    {edge.kind === "task_dependency" && edge.step ? (
+                      <g>
+                        <circle
+                          cx={edge.midX}
+                          cy={edge.midY}
+                          r={8}
+                          fill={resolvedTheme === "dark" ? "#4c1d95" : "#6d28d9"}
+                          fillOpacity={resolvedTheme === "dark" ? 0.92 : 0.9}
+                          stroke={resolvedTheme === "dark" ? "#c4b5fd" : "#ede9fe"}
+                          strokeWidth={1}
+                        />
+                        <text
+                          x={edge.midX}
+                          y={edge.midY + 0.8}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fill={resolvedTheme === "dark" ? "#f5f3ff" : "#ffffff"}
+                          fontSize="8"
+                          fontWeight="700"
+                        >
+                          {edge.step}
+                        </text>
+                      </g>
+                    ) : null}
                   </g>
                 ))}
                   {draftConnector ? (
@@ -2426,6 +2679,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   >
                     Виконані
                   </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-semibold transition",
+                      taskListScope === "flow"
+                        ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    )}
+                    onClick={() => setTaskListScope("flow")}
+                  >
+                    Flow
+                  </button>
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
@@ -2434,6 +2699,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     value={taskListSortMode}
                     onChange={(event) => setTaskListSortMode(event.target.value as TaskListSortMode)}
                     aria-label="Сортування списку задач"
+                    disabled={taskListScope === "flow"}
                   >
                     <option value="due_date">За датою</option>
                     <option value="status">За статусом</option>
@@ -2442,14 +2708,108 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 </div>
               </div>
 
-              {sortedTasksForList.length === 0 ? (
+              {taskListScope !== "flow" && sortedTasksForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
                   Немає задач за поточним фільтром.
                 </div>
               ) : null}
+              {taskListScope === "flow" && flowChainsForList.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
+                  Немає потоків. Додай залежності між задачами, щоб побачити Flow.
+                </div>
+              ) : null}
 
               <div className="space-y-2.5">
-                {sortedTasksForList.map(
+                {taskListScope === "flow"
+                  ? flowChainsForList.map((flow, flowIndex) => (
+                      <article
+                        key={flow.id}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900/90"
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            Flow {flowIndex + 1}
+                          </div>
+                          <div className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
+                            {flow.steps.length} кроки
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {flow.steps.map((step, stepIndex) => {
+                            const resolvedIconName = resolveBlockIconName(step.block!);
+                            const iconOption = getBlockIconOption(resolvedIconName);
+                            const BlockIcon = iconOption.icon;
+                            const iconColor = step.block?.color ?? "#4B5563";
+
+                            return (
+                              <div key={`${flow.id}-${step.task.id}`}>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition",
+                                    step.dueTone === "overdue"
+                                      ? "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
+                                      : step.dueTone === "warning"
+                                        ? "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
+                                        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/92"
+                                  )}
+                                  onClick={() => setSelectedBlockId(step.task.blockId)}
+                                >
+                                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[11px] font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/60 dark:text-violet-100">
+                                    {stepIndex + 1}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {step.task.title}
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                      <span
+                                        className={cn(
+                                          "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em]",
+                                          taskStatusBadgeClasses[step.computedStatus]
+                                        )}
+                                      >
+                                        {taskStatusLabel[step.computedStatus]}
+                                      </span>
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                                        <span
+                                          className="inline-flex h-4 w-4 items-center justify-center rounded"
+                                          style={{
+                                            backgroundColor: `${iconColor}18`,
+                                            color: iconColor
+                                          }}
+                                        >
+                                          <BlockIcon size={10} />
+                                        </span>
+                                        {step.block?.title}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
+                                          step.dueTone === "overdue"
+                                            ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
+                                            : step.dueTone === "warning"
+                                              ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
+                                              : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                                        )}
+                                      >
+                                        {formatTaskDueDate(step.task.dueDate)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </button>
+
+                                {stepIndex < flow.steps.length - 1 ? (
+                                  <div className="ml-6 mt-1 h-4 w-px bg-violet-300/80 dark:bg-violet-500/60" />
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </article>
+                    ))
+                  : sortedTasksForList.map(
                   ({ task, block, computedStatus, dueTone, dependencyTask, dependencyBlock }) => {
                     if (!block) {
                       return null;
