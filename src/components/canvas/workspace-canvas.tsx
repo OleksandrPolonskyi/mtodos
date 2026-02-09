@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  CalendarClock,
   CheckCircle2,
   Circle,
   LayoutDashboard,
@@ -20,8 +21,10 @@ import {
   Moon,
   Plus,
   RefreshCcw,
+  Repeat,
   Sparkles,
   Sun,
+  Trash2,
   Unlink,
   ZoomIn,
   ZoomOut,
@@ -123,6 +126,27 @@ const taskStatusLabel: Record<TaskStatus, string> = {
   done: "Готово"
 };
 
+const taskStatusOptions: Array<{ value: TaskStatus; label: string }> = [
+  { value: "todo", label: "До виконання" },
+  { value: "in_progress", label: "В роботі" },
+  { value: "blocked", label: "Заблоковано" },
+  { value: "done", label: "Готово" }
+];
+
+const recurrenceOptions: Array<{ value: Recurrence; label: string }> = [
+  { value: "none", label: "Без повтору" },
+  { value: "daily", label: "Щодня" },
+  { value: "weekly", label: "Щотижня" },
+  { value: "monthly", label: "Щомісяця" }
+];
+
+const recurrenceLabelMap: Record<Recurrence, string> = {
+  none: "Без повтору",
+  daily: "Щодня",
+  weekly: "Щотижня",
+  monthly: "Щомісяця"
+};
+
 const taskStatusBadgeClasses: Record<TaskStatus, string> = {
   todo:
     "border border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-500/50 dark:bg-sky-900/45 dark:text-sky-100",
@@ -140,6 +164,32 @@ const toLocalDateString = (date: Date): string => {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
+const getQuickDueDateValue = (preset: "today" | "tomorrow" | "weekend"): string => {
+  const base = new Date();
+  if (preset === "today") {
+    return toLocalDateString(base);
+  }
+
+  if (preset === "tomorrow") {
+    const tomorrow = new Date(base);
+    tomorrow.setDate(base.getDate() + 1);
+    return toLocalDateString(tomorrow);
+  }
+
+  const weekend = new Date(base);
+  const weekday = weekend.getDay();
+  if (weekday !== 6 && weekday !== 0) {
+    weekend.setDate(weekend.getDate() + (6 - weekday));
+  }
+  return toLocalDateString(weekend);
+};
+
+const quickDueDateOptions = [
+  { value: "today", label: "Сьогодні" },
+  { value: "tomorrow", label: "Завтра" },
+  { value: "weekend", label: "На вихідних" }
+] as const;
 
 const toDateTimestamp = (date: string | null): number => {
   if (!date) {
@@ -215,12 +265,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const gestureZoomStateRef = useRef<{ initialZoom: number } | null>(null);
   const dragStateRef = useRef<{
     blockId: string;
+    blockIds: string[];
     startClientX: number;
     startClientY: number;
     startBlockX: number;
     startBlockY: number;
-    lastX: number;
-    lastY: number;
+    startPositions: Record<string, { x: number; y: number }>;
+    moved: boolean;
+  } | null>(null);
+  const marqueeStateRef = useRef<{
+    startX: number;
+    startY: number;
     moved: boolean;
   } | null>(null);
   const shouldCenterCanvasRef = useRef(true);
@@ -230,12 +285,30 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
+  const [selectedCanvasBlockIds, setSelectedCanvasBlockIds] = useState<string[]>([]);
+  const [selectionRect, setSelectionRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>("list");
   const [taskListSortMode, setTaskListSortMode] = useState<TaskListSortMode>("due_date");
   const [taskListScope, setTaskListScope] = useState<TaskListScope>("active");
   const [taskListManualOrder, setTaskListManualOrder] = useState<string[]>([]);
   const [draggingTaskIdInList, setDraggingTaskIdInList] = useState<string | null>(null);
+  const [expandedListTaskId, setExpandedListTaskId] = useState<string | null>(null);
+  const [listQuickEditor, setListQuickEditor] = useState<{
+    taskId: string;
+    type: "status" | "dueDate";
+  } | null>(null);
+  const [listTaskTitleDrafts, setListTaskTitleDrafts] = useState<Record<string, string>>({});
+  const [listChecklistDrafts, setListChecklistDrafts] = useState<Record<string, string>>({});
+  const [listEditingChecklistByItem, setListEditingChecklistByItem] = useState<Record<string, string>>({});
+  const [taskDrawerCreateToken, setTaskDrawerCreateToken] = useState(0);
+  const [taskDrawerCreateBlockId, setTaskDrawerCreateBlockId] = useState<string | null>(null);
   const [canvasTitle, setCanvasTitle] = useState(DEFAULT_CANVAS_TITLE);
   const [canvasTitleDraft, setCanvasTitleDraft] = useState(DEFAULT_CANVAS_TITLE);
   const [savingCanvasTitle, setSavingCanvasTitle] = useState(false);
@@ -249,6 +322,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [error, setError] = useState<string | null>(null);
 
   const [isAddBlockOpen, setIsAddBlockOpen] = useState(false);
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [isBlockListOpen, setIsBlockListOpen] = useState(false);
   const [isEdgeManagerOpen, setIsEdgeManagerOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -257,6 +331,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [newBlockIconName, setNewBlockIconName] = useState(
     getDefaultIconNameForBlockType("custom")
   );
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskBlockId, setNewTaskBlockId] = useState("");
   const [edgeSourceId, setEdgeSourceId] = useState("");
   const [edgeTargetId, setEdgeTargetId] = useState("");
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
@@ -399,11 +475,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       if (selectedBlockId) {
         setSelectedBlockId(null);
+        setTaskDrawerCreateBlockId(null);
         return;
       }
 
       if (isAddBlockOpen) {
         setIsAddBlockOpen(false);
+        return;
+      }
+
+      if (isAddTaskOpen) {
+        setIsAddTaskOpen(false);
         return;
       }
 
@@ -424,7 +506,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
-  }, [isAddBlockOpen, isBlockListOpen, isEdgeManagerOpen, isMoreMenuOpen, linkDraft, selectedBlockId]);
+  }, [
+    isAddBlockOpen,
+    isAddTaskOpen,
+    isBlockListOpen,
+    isEdgeManagerOpen,
+    isMoreMenuOpen,
+    linkDraft,
+    selectedBlockId
+  ]);
 
   useEffect(() => {
     if (!isMoreMenuOpen) {
@@ -449,6 +539,74 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   }, [isMoreMenuOpen]);
 
   useEffect(() => {
+    if (!listQuickEditor) {
+      return;
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        setListQuickEditor(null);
+        return;
+      }
+
+      if (target.closest("[data-list-quick-editor='true']")) {
+        return;
+      }
+
+      setListQuickEditor(null);
+    };
+
+    window.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => window.removeEventListener("pointerdown", handleOutsidePointerDown);
+  }, [listQuickEditor]);
+
+  useEffect(() => {
+    if (viewMode !== "list" || !expandedListTaskId) {
+      return;
+    }
+
+    const handleOutsideTaskPointerDown = (event: PointerEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        setExpandedListTaskId(null);
+        setListQuickEditor(null);
+        return;
+      }
+
+      if (target.closest("[data-list-task-item='true']")) {
+        return;
+      }
+
+      if (target.closest("[data-list-quick-editor='true']")) {
+        return;
+      }
+
+      setExpandedListTaskId(null);
+      setListQuickEditor(null);
+    };
+
+    window.addEventListener("pointerdown", handleOutsideTaskPointerDown);
+    return () => window.removeEventListener("pointerdown", handleOutsideTaskPointerDown);
+  }, [expandedListTaskId, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "list") {
+      setExpandedListTaskId(null);
+      setListQuickEditor(null);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "canvas") {
+      setIsMarqueeSelecting(false);
+      setSelectionRect(null);
+      marqueeStateRef.current = null;
+      setSelectedCanvasBlockIds([]);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
     if (!selectedBlockId) {
       return;
     }
@@ -468,6 +626,16 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const selectedBlock = useMemo(() => {
     return selectedBlockId ? blocksById.get(selectedBlockId) ?? null : null;
   }, [blocksById, selectedBlockId]);
+
+  const openBlockDrawer = useCallback((blockId: string): void => {
+    setTaskDrawerCreateBlockId(null);
+    setSelectedBlockId(blockId);
+  }, []);
+
+  const closeBlockDrawer = useCallback((): void => {
+    setSelectedBlockId(null);
+    setTaskDrawerCreateBlockId(null);
+  }, []);
 
   const applyZoomAtPoint = useCallback(
     (requestedZoom: number, clientX: number, clientY: number): void => {
@@ -961,6 +1129,27 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       .sort((left, right) => right.steps.length - left.steps.length);
   }, [blocksById, dependencyBlockedTaskIds, flowInsights.chains, tasks]);
 
+  const dependencyTaskOptionsForList = useMemo(() => {
+    return [...tasks]
+      .map((item) => {
+        const blockTitle = blocksById.get(item.blockId)?.title ?? "Блок";
+        return {
+          id: item.id,
+          label: `${blockTitle} / ${item.title}`,
+          blockTitle,
+          order: item.order,
+          updatedAt: item.updatedAt
+        };
+      })
+      .sort((a, b) => {
+        const blockCompare = a.blockTitle.localeCompare(b.blockTitle, "uk");
+        if (blockCompare !== 0) {
+          return blockCompare;
+        }
+        return a.order - b.order || a.updatedAt.localeCompare(b.updatedAt);
+      });
+  }, [blocksById, tasks]);
+
   const sortedTasksForList = useMemo(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     const manualOrderIndex = new Map(taskListManualOrder.map((id, index) => [id, index]));
@@ -1044,6 +1233,24 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     return visible;
   }, [blocksById, dependencyBlockedTaskIds, taskListManualOrder, taskListScope, taskListSortMode, tasks]);
 
+  const taskSectionsForList = useMemo(() => {
+    const myTasks = sortedTasksForList.filter((item) => item.task.ownership === "mine");
+    const delegatedTasks = sortedTasksForList.filter((item) => item.task.ownership === "delegated");
+
+    return [
+      {
+        id: "mine",
+        title: "Мої задачі",
+        items: myTasks
+      },
+      {
+        id: "delegated",
+        title: "Делеговано",
+        items: delegatedTasks
+      }
+    ].filter((section) => section.items.length > 0);
+  }, [sortedTasksForList]);
+
   const moveManualTaskOrder = useCallback((draggedTaskId: string, targetTaskId: string): void => {
     if (draggedTaskId === targetTaskId) {
       return;
@@ -1122,12 +1329,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     const minY = Math.min(...blocks.map((block) => block.y));
     const maxX = Math.max(...blocks.map((block) => block.x + CARD_WIDTH));
     const maxY = Math.max(...blocks.map((block) => block.y + CARD_HEIGHT));
+    const normalizedMinX = Math.min(0, minX);
+    const normalizedMinY = Math.min(0, minY);
 
     return {
-      width: Math.max(3600, maxX - minX + BOARD_PADDING * 2),
-      height: Math.max(2400, maxY - minY + BOARD_PADDING * 2),
-      shiftX: BOARD_PADDING - minX,
-      shiftY: BOARD_PADDING - minY
+      width: Math.max(3600, maxX - normalizedMinX + BOARD_PADDING * 2),
+      height: Math.max(2400, maxY - normalizedMinY + BOARD_PADDING * 2),
+      shiftX: BOARD_PADDING - normalizedMinX,
+      shiftY: BOARD_PADDING - normalizedMinY
     };
   }, [blocks]);
 
@@ -1544,24 +1753,152 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         return;
       }
 
+      const dragBlockIds =
+        selectedCanvasBlockIds.includes(blockId) && selectedCanvasBlockIds.length > 1
+          ? selectedCanvasBlockIds
+          : [blockId];
+      const startPositions = dragBlockIds.reduce<Record<string, { x: number; y: number }>>(
+        (acc, id) => {
+          const item = blocksById.get(id);
+          if (item) {
+            acc[id] = { x: item.x, y: item.y };
+          }
+          return acc;
+        },
+        {}
+      );
+      if (!startPositions[blockId]) {
+        startPositions[blockId] = { x: block.x, y: block.y };
+      }
+
       event.preventDefault();
       event.stopPropagation();
 
+      setSelectedCanvasBlockIds((previous) =>
+        previous.includes(blockId) && previous.length > 1 ? previous : [blockId]
+      );
+
       dragStateRef.current = {
         blockId,
+        blockIds: dragBlockIds,
         startClientX: event.clientX,
         startClientY: event.clientY,
         startBlockX: block.x,
         startBlockY: block.y,
-        lastX: block.x,
-        lastY: block.y,
+        startPositions,
         moved: false
       };
 
       setDraggingBlockId(blockId);
     },
-    [blocksById, linkDraft]
+    [blocksById, linkDraft, selectedCanvasBlockIds]
   );
+
+  const handleCanvasBoardPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      if (linkDraft) {
+        setLinkDraft(null);
+        setLinkPointer(null);
+        return;
+      }
+
+      if (event.pointerType === "mouse" && event.button !== 0) {
+        return;
+      }
+
+      const startPoint = clientToBoardPoint(event.clientX, event.clientY);
+      if (!startPoint) {
+        return;
+      }
+
+      event.preventDefault();
+      setSelectedCanvasBlockIds([]);
+      setSelectionRect({ x: startPoint.x, y: startPoint.y, width: 0, height: 0 });
+      marqueeStateRef.current = {
+        startX: startPoint.x,
+        startY: startPoint.y,
+        moved: false
+      };
+      setIsMarqueeSelecting(true);
+    },
+    [clientToBoardPoint, linkDraft]
+  );
+
+  useEffect(() => {
+    if (!isMarqueeSelecting) {
+      return;
+    }
+
+    const onPointerMove = (event: PointerEvent): void => {
+      const marqueeState = marqueeStateRef.current;
+      if (!marqueeState) {
+        return;
+      }
+
+      const currentPoint = clientToBoardPoint(event.clientX, event.clientY);
+      if (!currentPoint) {
+        return;
+      }
+
+      const dx = currentPoint.x - marqueeState.startX;
+      const dy = currentPoint.y - marqueeState.startY;
+      const distance = Math.hypot(dx, dy);
+      if (!marqueeState.moved && distance >= DRAG_THRESHOLD_PX / Math.max(zoomRef.current, 0.0001)) {
+        marqueeState.moved = true;
+      }
+
+      const nextRect = {
+        x: Math.min(marqueeState.startX, currentPoint.x),
+        y: Math.min(marqueeState.startY, currentPoint.y),
+        width: Math.abs(dx),
+        height: Math.abs(dy)
+      };
+      setSelectionRect(nextRect);
+
+      if (!marqueeState.moved) {
+        return;
+      }
+
+      const selectedIds = positionedBlocks
+        .filter(({ left, top }) => {
+          const blockLeft = left;
+          const blockTop = top;
+          const blockRight = blockLeft + CARD_WIDTH;
+          const blockBottom = blockTop + CARD_HEIGHT;
+          const rectRight = nextRect.x + nextRect.width;
+          const rectBottom = nextRect.y + nextRect.height;
+
+          return !(
+            rectRight < blockLeft ||
+            nextRect.x > blockRight ||
+            rectBottom < blockTop ||
+            nextRect.y > blockBottom
+          );
+        })
+        .map(({ block }) => block.id);
+
+      setSelectedCanvasBlockIds(selectedIds);
+    };
+
+    const onPointerUp = (): void => {
+      const marqueeState = marqueeStateRef.current;
+      if (!marqueeState?.moved) {
+        setSelectedCanvasBlockIds([]);
+      }
+
+      marqueeStateRef.current = null;
+      setIsMarqueeSelecting(false);
+      setSelectionRect(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [clientToBoardPoint, isMarqueeSelecting, positionedBlocks]);
 
   const handleAnchorPointerDown = useCallback(
     async (
@@ -1620,18 +1957,23 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       dragState.moved = true;
       const scale = zoomRef.current;
-      const nextX = Math.round(dragState.startBlockX + dx / scale);
-      const nextY = Math.round(dragState.startBlockY + dy / scale);
-
-      dragState.lastX = nextX;
-      dragState.lastY = nextY;
+      const nextDeltaX = dx / scale;
+      const nextDeltaY = dy / scale;
+      const draggedIds = new Set(dragState.blockIds);
 
       setBlocks((previous) =>
         previous.map((block) => {
-          if (block.id !== dragState.blockId) {
+          if (!draggedIds.has(block.id)) {
             return block;
           }
 
+          const start = dragState.startPositions[block.id];
+          if (!start) {
+            return block;
+          }
+
+          const nextX = Math.round(start.x + nextDeltaX);
+          const nextY = Math.round(start.y + nextDeltaY);
           if (block.x === nextX && block.y === nextY) {
             return block;
           }
@@ -1654,7 +1996,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       }
 
       if (!dragState.moved) {
-        setSelectedBlockId(dragState.blockId);
+        openBlockDrawer(dragState.blockId);
 
         setDraggingBlockId(null);
         dragStateRef.current = null;
@@ -1662,18 +2004,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       }
 
       setBlocks((previous) => {
-        const next = previous.map((block) =>
-          block.id === dragState.blockId
-            ? {
-                ...block,
-                x: dragState.lastX,
-                y: dragState.lastY
-              }
-            : block
-        );
-
-        persistCurrentBlockPositions(next);
-        return next;
+        persistCurrentBlockPositions(previous);
+        return previous;
       });
 
       setDraggingBlockId(null);
@@ -1687,7 +2019,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [draggingBlockId, persistCurrentBlockPositions]);
+  }, [draggingBlockId, openBlockDrawer, persistCurrentBlockPositions]);
 
   const handleAddBlock = async (): Promise<void> => {
     const title = newBlockTitle.trim();
@@ -1712,7 +2044,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       setNewBlockType("custom");
       setNewBlockIconName(getDefaultIconNameForBlockType("custom"));
       setIsAddBlockOpen(false);
-      setSelectedBlockId(response.block.id);
+      openBlockDrawer(response.block.id);
     } catch (addError) {
       setError(extractErrorMessage(addError));
     }
@@ -1728,11 +2060,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         )
       );
       setTasks((previous) => previous.filter((task) => task.blockId !== blockId));
-      setSelectedBlockId(null);
+      closeBlockDrawer();
     } catch (archiveError) {
       setError(extractErrorMessage(archiveError));
     }
-  }, []);
+  }, [closeBlockDrawer]);
 
   const handleRenameBlock = useCallback(
     async (blockId: string, title: string): Promise<void> => {
@@ -1827,20 +2159,19 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     }
   }, [canvasTitle, canvasTitleDraft]);
 
-  const handleCreateTask = useCallback(
-    async (payload: {
-      title: string;
-      dueDate: string | null;
-      recurrence: Recurrence;
-    }): Promise<void> => {
-      if (!selectedBlockId) {
-        return;
+  const createTaskInBlock = useCallback(
+    async (
+      blockId: string,
+      payload: {
+        title: string;
+        dueDate: string | null;
+        recurrence: Recurrence;
       }
-
+    ): Promise<TaskItem | null> => {
       try {
-        const order = tasks.filter((task) => task.blockId === selectedBlockId).length;
+        const order = tasks.filter((task) => task.blockId === blockId).length;
         const response = await apiPost<{ task: TaskItem }>("/api/tasks", {
-          blockId: selectedBlockId,
+          blockId,
           title: payload.title,
           dueDate: payload.dueDate,
           recurrence: payload.recurrence,
@@ -1849,12 +2180,66 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         });
 
         setTasks((previous) => [...previous, response.task]);
+        return response.task;
       } catch (createError) {
         setError(extractErrorMessage(createError));
+        return null;
       }
     },
-    [selectedBlockId, tasks]
+    [tasks]
   );
+
+  const handleCreateTask = useCallback(
+    async (payload: {
+      title: string;
+      dueDate: string | null;
+      recurrence: Recurrence;
+    }): Promise<TaskItem | null> => {
+      if (!selectedBlockId) {
+        return null;
+      }
+
+      return createTaskInBlock(selectedBlockId, payload);
+    },
+    [createTaskInBlock, selectedBlockId]
+  );
+
+  const openCreateTaskModal = useCallback((): void => {
+    if (blocks.length === 0) {
+      return;
+    }
+
+    setNewTaskTitle("");
+    setNewTaskBlockId(selectedBlockId ?? blocks[0]?.id ?? "");
+    setIsAddTaskOpen(true);
+  }, [blocks, selectedBlockId]);
+
+  const handleCreateTaskFromList = useCallback(async (): Promise<void> => {
+    const title = newTaskTitle.trim();
+    if (!title || !newTaskBlockId) {
+      return;
+    }
+
+    const created = await createTaskInBlock(newTaskBlockId, {
+      title,
+      dueDate: null,
+      recurrence: "none"
+    });
+
+    if (!created) {
+      return;
+    }
+
+    setIsAddTaskOpen(false);
+    setNewTaskTitle("");
+    setNewTaskBlockId("");
+  }, [createTaskInBlock, newTaskBlockId, newTaskTitle]);
+
+  const handleQuickAddTaskForBlock = useCallback((blockId: string): void => {
+    setTaskDrawerCreateBlockId(blockId);
+    setSelectedBlockId(blockId);
+    setTaskDrawerCreateToken((previous) => previous + 1);
+  }, []);
 
   const handleUpdateTask = useCallback(
     async (taskId: string, payload: Partial<TaskItem>): Promise<void> => {
@@ -2060,14 +2445,26 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 Список
               </button>
             </div>
-            <button
-              type="button"
-              className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold"
-              onClick={() => setIsAddBlockOpen(true)}
-            >
-              <Plus size={15} />
-              Новий блок
-            </button>
+            {viewMode === "canvas" ? (
+              <button
+                type="button"
+                className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold"
+                onClick={() => setIsAddBlockOpen(true)}
+              >
+                <Plus size={15} />
+                Новий блок
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={openCreateTaskModal}
+                disabled={blocks.length === 0}
+              >
+                <Plus size={15} />
+                Нова задача
+              </button>
+            )}
             <div ref={moreMenuRef} className="relative">
               <button
                 type="button"
@@ -2258,15 +2655,19 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   transform: `scale(${zoom})`,
                   transformOrigin: "top left"
                 }}
-              onPointerDown={() => {
-                if (!linkDraft) {
-                  return;
-                }
-
-                setLinkDraft(null);
-                setLinkPointer(null);
-              }}
+                onPointerDown={handleCanvasBoardPointerDown}
               >
+                {selectionRect && (selectionRect.width > 1 || selectionRect.height > 1) ? (
+                  <div
+                    className="pointer-events-none absolute z-[5] rounded-md border border-sky-400/70 bg-sky-300/15 dark:border-sky-500/70 dark:bg-sky-500/20"
+                    style={{
+                      left: selectionRect.x,
+                      top: selectionRect.y,
+                      width: selectionRect.width,
+                      height: selectionRect.height
+                    }}
+                  />
+                ) : null}
                 <svg className="pointer-events-none absolute inset-0 z-[2] h-full w-full" aria-hidden>
                 {edgePaths.map((edge) => (
                   <g key={edge.id}>
@@ -2337,7 +2738,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               ? 0.44
                               : 0.46
                       }
-                      strokeDasharray={edge.kind === "task_dependency" ? "15 30" : edge.blocked ? "14 34" : "16 32"}
+                      strokeDasharray={edge.kind === "task_dependency" ? "15 33" : edge.blocked ? "14 34" : "16 32"}
                       strokeLinecap="round"
                     />
                     <path
@@ -2366,7 +2767,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       }
                       strokeWidth={1.1}
                       strokeOpacity={edge.kind === "task_dependency" ? 0.95 : edge.blocked ? 0.97 : 0.98}
-                      strokeDasharray={edge.kind === "task_dependency" ? "8 36" : edge.blocked ? "8 40" : "8 38"}
+                      strokeDasharray={edge.kind === "task_dependency" ? "8 40" : edge.blocked ? "8 40" : "8 40"}
                       strokeLinecap="round"
                     />
                     <circle
@@ -2487,7 +2888,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         : blockDueToneByBlock[block.id] === "warning"
                           ? "hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-100/70 dark:hover:border-amber-400 dark:hover:bg-amber-900/40"
                           : "hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/70 dark:hover:border-sky-500 dark:hover:bg-sky-900/30",
-                    selectedBlockId === block.id ? "ring-2 ring-sky-300/70 dark:ring-sky-500/70" : "",
+                    selectedBlockId === block.id || selectedCanvasBlockIds.includes(block.id)
+                      ? "ring-2 ring-sky-300/70 dark:ring-sky-500/70"
+                      : "",
                     linkDraft?.sourceBlockId === block.id ? "ring-2 ring-amber-300/80 dark:ring-amber-400/80" : ""
                   )}
                   style={{
@@ -2499,6 +2902,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   onPointerEnter={() => setHoveredBlockId(block.id)}
                   onPointerLeave={() => setHoveredBlockId((current) => (current === block.id ? null : current))}
                   onPointerDown={(event) => startBlockDrag(event, block.id)}
+                  data-canvas-block-card="true"
                 >
                   {(() => {
                     const resolvedIconName = resolveBlockIconName(block);
@@ -2559,8 +2963,31 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             >
                               <BlockIcon size={17} />
                             </span>
-                            <div className="line-clamp-1 text-base font-display font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                              {block.title}
+                            <div className="flex items-center gap-1.5">
+                              <div className="line-clamp-1 text-base font-display font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                                {block.title}
+                              </div>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-white/95 text-sky-700 transition duration-100 hover:border-sky-300 hover:bg-sky-50 dark:border-sky-500/60 dark:bg-slate-900 dark:text-sky-200 dark:hover:border-sky-400 dark:hover:bg-sky-900/40",
+                                  hoveredBlockId === block.id
+                                    ? "opacity-100"
+                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                                )}
+                                onPointerDown={(event) => {
+                                  event.stopPropagation();
+                                  event.preventDefault();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleQuickAddTaskForBlock(block.id);
+                                }}
+                                title="Нова задача"
+                                aria-label={`Додати задачу у блок ${block.title}`}
+                              >
+                                <Plus size={12} />
+                              </button>
                             </div>
                           </div>
                           <div className="mt-1 flex items-center gap-2">
@@ -2719,7 +3146,32 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 </div>
               ) : null}
 
-              <div className="space-y-2.5">
+              <div
+                className="space-y-2.5"
+                onPointerDownCapture={(event) => {
+                  if (taskListScope === "flow") {
+                    return;
+                  }
+
+                  const target = event.target as HTMLElement | null;
+                  if (!target) {
+                    setExpandedListTaskId(null);
+                    setListQuickEditor(null);
+                    return;
+                  }
+
+                  if (target.closest("[data-list-task-item='true']")) {
+                    return;
+                  }
+
+                  if (target.closest("[data-list-quick-editor='true']")) {
+                    return;
+                  }
+
+                  setExpandedListTaskId(null);
+                  setListQuickEditor(null);
+                }}
+              >
                 {taskListScope === "flow"
                   ? flowChainsForList.map((flow, flowIndex) => (
                       <article
@@ -2754,7 +3206,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         ? "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
                                         : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/92"
                                   )}
-                                  onClick={() => setSelectedBlockId(step.task.blockId)}
+                                  onClick={() => openBlockDrawer(step.task.blockId)}
                                 >
                                   <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[11px] font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/60 dark:text-violet-100">
                                     {stepIndex + 1}
@@ -2809,150 +3261,504 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         </div>
                       </article>
                     ))
-                  : sortedTasksForList.map(
-                  ({ task, block, computedStatus, dueTone, dependencyTask, dependencyBlock }) => {
-                    if (!block) {
-                      return null;
-                    }
-
-                    const resolvedIconName = resolveBlockIconName(block);
-                    const iconOption = getBlockIconOption(resolvedIconName);
-                    const BlockIcon = iconOption.icon;
-                    const iconColor = block.color ?? "#4B5563";
-
-                    const isDelegated = task.ownership === "delegated";
-
-                    return (
-                      <article
-                        key={task.id}
-                        draggable={taskListSortMode === "custom"}
-                        onDragStart={() => {
-                          if (taskListSortMode !== "custom") {
-                            return;
-                          }
-                          setDraggingTaskIdInList(task.id);
-                        }}
-                        onDragEnter={() => {
-                          if (taskListSortMode !== "custom" || !draggingTaskIdInList) {
-                            return;
-                          }
-                          moveManualTaskOrder(draggingTaskIdInList, task.id);
-                        }}
-                        onDragOver={(event) => {
-                          if (taskListSortMode !== "custom") {
-                            return;
-                          }
-                          event.preventDefault();
-                        }}
-                        onDragEnd={() => setDraggingTaskIdInList(null)}
-                        onDrop={() => setDraggingTaskIdInList(null)}
-                        className={cn(
-                          "group w-full rounded-2xl border bg-white px-4 py-3 transition",
-                          taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
-                          draggingTaskIdInList === task.id ? "opacity-45" : "",
-                          isDelegated ? "opacity-55 saturate-60" : "",
-                          dueTone === "overdue"
-                            ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
-                            : dueTone === "warning"
-                              ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
-                              : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/60 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
-                        )}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <button
-                            type="button"
-                            className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-300"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleUpdateTask(task.id, {
-                                status: task.status === "done" ? "todo" : "done"
-                              });
-                            }}
-                            aria-label={
-                              task.status === "done"
-                                ? "Позначити як не виконано"
-                                : "Позначити як виконано"
-                            }
-                          >
-                            {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                          </button>
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => setSelectedBlockId(task.blockId)}
-                          >
-                            <div
-                              className={cn(
-                                "line-clamp-2 text-base font-semibold",
-                                task.status === "done"
-                                  ? "text-slate-500 line-through dark:text-slate-400"
-                                  : "text-slate-900 dark:text-slate-100"
-                              )}
-                            >
-                              {task.title}
-                            </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              <span
-                                className={cn(
-                                  "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em]",
-                                  taskStatusBadgeClasses[computedStatus]
-                                )}
-                              >
-                                {taskStatusLabel[computedStatus]}
-                              </span>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
-                                  dueTone === "overdue"
-                                    ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
-                                    : dueTone === "warning"
-                                      ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
-                                      : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                                )}
-                              >
-                                {formatTaskDueDate(task.dueDate)}
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
-                                <span
-                                  className="inline-flex h-4 w-4 items-center justify-center rounded"
-                                  style={{
-                                    backgroundColor: `${iconColor}18`,
-                                    color: iconColor
-                                  }}
-                                >
-                                  <BlockIcon size={10} />
-                                </span>
-                                {block.title}
-                              </span>
-                            </div>
-                            {task.checklist.length > 0 ? (
-                              <div className="mt-2 ml-3 space-y-1.5">
-                                {task.checklist.map((item) => (
-                                  <div key={item.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                      {item.done ? <CheckCircle2 size={13} /> : <Circle size={13} />}
-                                    </span>
-                                    <span className={cn(item.done ? "line-through text-slate-500" : "")}>
-                                      {item.text}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : null}
-                            {computedStatus === "blocked" && dependencyTask ? (
-                              <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] font-semibold text-amber-900">
-                                <AlertTriangle size={12} />
-                                <span className="truncate">
-                                  Блокує: {dependencyBlock?.title ?? "Блок"} / {dependencyTask.title}
-                                </span>
-                              </div>
-                            ) : null}
-                          </button>
+                  : taskSectionsForList.map((section) => (
+                      <section key={section.id} className="space-y-2">
+                        <div className="px-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          {section.title}
                         </div>
-                      </article>
-                    );
-                  }
-                )}
+                        <div className="space-y-2.5">
+                          {section.items.map(
+                            ({ task, block, computedStatus, dueTone, dependencyTask, dependencyBlock }) => {
+                              if (!block) {
+                                return null;
+                              }
+
+                              const resolvedIconName = resolveBlockIconName(block);
+                              const iconOption = getBlockIconOption(resolvedIconName);
+                              const BlockIcon = iconOption.icon;
+                              const iconColor = block.color ?? "#4B5563";
+                              const isExpanded = expandedListTaskId === task.id;
+                              const draftTitle = listTaskTitleDrafts[task.id] ?? task.title;
+                              const checklistDraft = listChecklistDrafts[task.id] ?? "";
+                              const isStatusEditorOpen =
+                                listQuickEditor?.taskId === task.id && listQuickEditor.type === "status";
+                              const isDueDateEditorOpen =
+                                listQuickEditor?.taskId === task.id && listQuickEditor.type === "dueDate";
+                              const taskDependencyOptions = dependencyTaskOptionsForList.filter(
+                                (candidate) => candidate.id !== task.id
+                              );
+
+                              return (
+                                <article
+                                  key={task.id}
+                                  data-list-task-item="true"
+                                  draggable={taskListSortMode === "custom"}
+                                  onDragStart={() => {
+                                    if (taskListSortMode !== "custom") {
+                                      return;
+                                    }
+                                    setDraggingTaskIdInList(task.id);
+                                  }}
+                                  onDragEnter={() => {
+                                    if (taskListSortMode !== "custom" || !draggingTaskIdInList) {
+                                      return;
+                                    }
+                                    moveManualTaskOrder(draggingTaskIdInList, task.id);
+                                  }}
+                                  onDragOver={(event) => {
+                                    if (taskListSortMode !== "custom") {
+                                      return;
+                                    }
+                                    event.preventDefault();
+                                  }}
+                                  onDragEnd={() => setDraggingTaskIdInList(null)}
+                                  onDrop={() => setDraggingTaskIdInList(null)}
+                                  onClick={() =>
+                                    setExpandedListTaskId((current) => (current === task.id ? null : task.id))
+                                  }
+                                  className={cn(
+                                    "group w-full rounded-2xl border bg-white px-4 py-3 transition",
+                                    taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
+                                    draggingTaskIdInList === task.id ? "opacity-45" : "",
+                                    dueTone === "overdue"
+                                      ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
+                                      : dueTone === "warning"
+                                        ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
+                                        : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/60 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
+                                  )}
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <button
+                                      type="button"
+                                      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleUpdateTask(task.id, {
+                                          status: task.status === "done" ? "todo" : "done"
+                                        });
+                                      }}
+                                      aria-label={
+                                        task.status === "done"
+                                          ? "Позначити як не виконано"
+                                          : "Позначити як виконано"
+                                      }
+                                    >
+                                      {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                      <div
+                                        className={cn(
+                                          "line-clamp-2 text-base font-semibold",
+                                          task.status === "done"
+                                            ? "text-slate-500 line-through dark:text-slate-400"
+                                            : "text-slate-900 dark:text-slate-100"
+                                        )}
+                                      >
+                                        <input
+                                          className={cn(
+                                            "w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-base font-semibold outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
+                                            task.status === "done"
+                                              ? "text-slate-500 line-through dark:text-slate-400"
+                                              : "text-slate-900 dark:text-slate-100"
+                                          )}
+                                          value={draftTitle}
+                                          onClick={(event) => event.stopPropagation()}
+                                          onFocus={() => setExpandedListTaskId(task.id)}
+                                          onChange={(event) => {
+                                            setListTaskTitleDrafts((prev) => ({
+                                              ...prev,
+                                              [task.id]: event.target.value
+                                            }));
+                                          }}
+                                          onBlur={() => {
+                                            const nextTitle = draftTitle.trim();
+                                            if (nextTitle && nextTitle !== task.title) {
+                                              void handleUpdateTask(task.id, { title: nextTitle });
+                                            }
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                        <div className="relative" data-list-quick-editor="true">
+                                          <button
+                                            type="button"
+                                            className={cn(
+                                              "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
+                                              taskStatusBadgeClasses[computedStatus]
+                                            )}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              setListQuickEditor((current) =>
+                                                current?.taskId === task.id && current.type === "status"
+                                                  ? null
+                                                  : { taskId: task.id, type: "status" }
+                                              );
+                                            }}
+                                          >
+                                            {taskStatusLabel[computedStatus]}
+                                          </button>
+                                          {isStatusEditorOpen ? (
+                                            <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                              {taskStatusOptions.map((option) => (
+                                                <button
+                                                  key={option.value}
+                                                  type="button"
+                                                  className={cn(
+                                                    "mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition duration-100 last:mb-0",
+                                                    option.value === task.status
+                                                      ? "bg-sky-100 text-sky-800 dark:bg-sky-900/55 dark:text-sky-100"
+                                                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                  )}
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    void handleUpdateTask(task.id, { status: option.value });
+                                                    setListQuickEditor(null);
+                                                  }}
+                                                >
+                                                  {option.label}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <div className="relative" data-list-quick-editor="true">
+                                          <button
+                                            type="button"
+                                            className={cn(
+                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100 hover:brightness-95",
+                                              dueTone === "overdue"
+                                                ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
+                                                : dueTone === "warning"
+                                                  ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
+                                                  : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                                            )}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              setListQuickEditor((current) =>
+                                                current?.taskId === task.id && current.type === "dueDate"
+                                                  ? null
+                                                  : { taskId: task.id, type: "dueDate" }
+                                              );
+                                            }}
+                                          >
+                                            <CalendarClock size={10} />
+                                            {formatTaskDueDate(task.dueDate)}
+                                          </button>
+                                          {isDueDateEditorOpen ? (
+                                            <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                              <div className="mb-2 grid grid-cols-3 gap-1">
+                                                {quickDueDateOptions.map((option) => (
+                                                  <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    className="soft-button px-2 py-1 text-[10px] font-semibold"
+                                                    onClick={(event) => {
+                                                      event.stopPropagation();
+                                                      void handleUpdateTask(task.id, {
+                                                        dueDate: getQuickDueDateValue(option.value)
+                                                      });
+                                                      setListQuickEditor(null);
+                                                    }}
+                                                  >
+                                                    {option.label}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                              <input
+                                                type="date"
+                                                className="soft-input mb-2 w-full px-2 py-1 text-xs"
+                                                value={task.dueDate ?? ""}
+                                                onClick={(event) => event.stopPropagation()}
+                                                onChange={(event) => {
+                                                  void handleUpdateTask(task.id, {
+                                                    dueDate: event.target.value || null
+                                                  });
+                                                  setListQuickEditor(null);
+                                                }}
+                                              />
+                                              <button
+                                                type="button"
+                                                className="soft-button inline-flex w-full items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  void handleUpdateTask(task.id, { dueDate: null });
+                                                  setListQuickEditor(null);
+                                                }}
+                                              >
+                                                Очистити дату
+                                              </button>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        {task.recurrence !== "none" ? (
+                                          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100 px-2 py-1 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
+                                            <Repeat size={10} />
+                                            {recurrenceLabelMap[task.recurrence]}
+                                          </span>
+                                        ) : null}
+                                        <button
+                                          type="button"
+                                          className={cn(
+                                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100",
+                                            task.ownership === "mine"
+                                              ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
+                                              : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                          )}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            void handleUpdateTask(task.id, {
+                                              ownership: task.ownership === "mine" ? "delegated" : "mine"
+                                            });
+                                          }}
+                                        >
+                                          {task.ownership === "mine" ? "Моє" : "Делеговано"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            openBlockDrawer(task.blockId);
+                                          }}
+                                        >
+                                          <span
+                                            className="inline-flex h-4 w-4 items-center justify-center rounded"
+                                            style={{
+                                              backgroundColor: `${iconColor}18`,
+                                              color: iconColor
+                                            }}
+                                          >
+                                            <BlockIcon size={10} />
+                                          </span>
+                                          {block.title}
+                                        </button>
+                                      </div>
+                                      {task.checklist.length > 0 ? (
+                                        <div className="mt-2 ml-3 space-y-1.5">
+                                          {task.checklist.map((item) => (
+                                            <div key={item.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                              <button
+                                                type="button"
+                                                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  const nextChecklist = task.checklist.map((entry) =>
+                                                    entry.id === item.id ? { ...entry, done: !entry.done } : entry
+                                                  );
+                                                  void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                                }}
+                                              >
+                                                {item.done ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                                              </button>
+                                              {isExpanded ? (
+                                                <>
+                                                  <input
+                                                    className={cn(
+                                                      "soft-input min-w-0 flex-1 px-2 py-1 text-sm",
+                                                      item.done ? "line-through text-slate-500" : ""
+                                                    )}
+                                                    value={listEditingChecklistByItem[`${task.id}:${item.id}`] ?? item.text}
+                                                    onClick={(event) => event.stopPropagation()}
+                                                    onChange={(event) => {
+                                                      const key = `${task.id}:${item.id}`;
+                                                      setListEditingChecklistByItem((prev) => ({
+                                                        ...prev,
+                                                        [key]: event.target.value
+                                                      }));
+                                                    }}
+                                                    onBlur={(event) => {
+                                                      const key = `${task.id}:${item.id}`;
+                                                      const nextText = event.target.value.trim();
+                                                      if (!nextText) {
+                                                        setListEditingChecklistByItem((prev) => ({
+                                                          ...prev,
+                                                          [key]: item.text
+                                                        }));
+                                                        return;
+                                                      }
+                                                      if (nextText !== item.text) {
+                                                        const nextChecklist = task.checklist.map((entry) =>
+                                                          entry.id === item.id ? { ...entry, text: nextText } : entry
+                                                        );
+                                                        void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                                      }
+                                                      setListEditingChecklistByItem((prev) => {
+                                                        const next = { ...prev };
+                                                        delete next[key];
+                                                        return next;
+                                                      });
+                                                    }}
+                                                  />
+                                                  <button
+                                                    type="button"
+                                                    className="soft-button inline-flex h-7 w-7 items-center justify-center border-destructive text-destructive"
+                                                    onClick={(event) => {
+                                                      event.stopPropagation();
+                                                      const nextChecklist = task.checklist.filter(
+                                                        (entry) => entry.id !== item.id
+                                                      );
+                                                      void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                                    }}
+                                                  >
+                                                    <Trash2 size={12} />
+                                                  </button>
+                                                </>
+                                              ) : (
+                                                <span className={cn(item.done ? "line-through text-slate-500" : "")}>
+                                                  {item.text}
+                                                </span>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                      {isExpanded ? (
+                                        <div className="mt-2 ml-3 flex gap-2">
+                                          <input
+                                            className="soft-input w-full px-2 py-1 text-xs"
+                                            placeholder="Нова підзадача"
+                                            value={checklistDraft}
+                                            onClick={(event) => event.stopPropagation()}
+                                            onChange={(event) => {
+                                              setListChecklistDrafts((prev) => ({
+                                                ...prev,
+                                                [task.id]: event.target.value
+                                              }));
+                                            }}
+                                          />
+                                          <button
+                                            type="button"
+                                            className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              const text = checklistDraft.trim();
+                                              if (!text) {
+                                                return;
+                                              }
+                                              const nextChecklist = [
+                                                ...task.checklist,
+                                                { id: crypto.randomUUID(), text, done: false }
+                                              ];
+                                              void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                              setListChecklistDrafts((prev) => ({ ...prev, [task.id]: "" }));
+                                            }}
+                                          >
+                                            <Plus size={12} />
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                      {computedStatus === "blocked" && dependencyTask ? (
+                                        <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] font-semibold text-amber-900">
+                                          <AlertTriangle size={12} />
+                                          <span className="truncate">
+                                            Блокує: {dependencyBlock?.title ?? "Блок"} / {dependencyTask.title}
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {isExpanded ? (
+                                        <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
+                                          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                            <select
+                                              className="soft-input px-2 py-1 text-xs"
+                                              value={task.status}
+                                              onClick={(event) => event.stopPropagation()}
+                                              onChange={(event) => {
+                                                void handleUpdateTask(task.id, {
+                                                  status: event.target.value as TaskStatus
+                                                });
+                                              }}
+                                            >
+                                              {taskStatusOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            <input
+                                              type="date"
+                                              className="soft-input px-2 py-1 text-xs"
+                                              value={task.dueDate ?? ""}
+                                              onClick={(event) => event.stopPropagation()}
+                                              onChange={(event) => {
+                                                void handleUpdateTask(task.id, {
+                                                  dueDate: event.target.value || null
+                                                });
+                                              }}
+                                            />
+                                            <select
+                                              className="soft-input px-2 py-1 text-xs"
+                                              value={task.recurrence}
+                                              onClick={(event) => event.stopPropagation()}
+                                              onChange={(event) => {
+                                                void handleUpdateTask(task.id, {
+                                                  recurrence: event.target.value as Recurrence
+                                                });
+                                              }}
+                                            >
+                                              {recurrenceOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
+                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                                              Залежність задачі
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                                              <select
+                                                className="soft-input px-2 py-1 text-xs"
+                                                value={task.dependsOnTaskId ?? ""}
+                                                onClick={(event) => event.stopPropagation()}
+                                                onChange={(event) => {
+                                                  const nextTaskId = event.target.value || null;
+                                                  void handleUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
+                                                }}
+                                              >
+                                                <option value="">Без залежності</option>
+                                                {taskDependencyOptions.map((option) => (
+                                                  <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                              <button
+                                                type="button"
+                                                className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  void handleUpdateTask(task.id, { dependsOnTaskId: null });
+                                                }}
+                                              >
+                                                Очистити
+                                              </button>
+                                            </div>
+                                          </div>
+                                          <div className="flex justify-end">
+                                            <button
+                                              type="button"
+                                              className="soft-button inline-flex items-center gap-1 border-destructive px-2.5 py-1 text-xs font-semibold text-destructive"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                void handleDeleteTask(task.id);
+                                              }}
+                                            >
+                                              <Trash2 size={12} />
+                                              Видалити
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </article>
+                              );
+                            }
+                          )}
+                        </div>
+                      </section>
+                    ))}
               </div>
             </div>
           </div>
@@ -2977,6 +3783,81 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           </div>
         ) : null}
       </section>
+
+      {isAddTaskOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]"
+          onClick={() => setIsAddTaskOpen(false)}
+        >
+          <div
+            className="surface-panel w-full max-w-md rounded-2xl p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  <Sparkles size={13} />
+                  Нова задача
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Створи задачу зі списку і привʼяжи її до потрібного блоку.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="soft-button inline-flex h-8 w-8 items-center justify-center"
+                onClick={() => setIsAddTaskOpen(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <input
+              className="soft-input mb-2 w-full px-3 py-2 text-base"
+              placeholder="Назва задачі"
+              value={newTaskTitle}
+              onChange={(event) => setNewTaskTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+
+                void handleCreateTaskFromList();
+              }}
+            />
+            <select
+              className="soft-input mb-3 w-full px-3 py-2 text-sm"
+              value={newTaskBlockId}
+              onChange={(event) => setNewTaskBlockId(event.target.value)}
+            >
+              <option value="">Оберіть блок</option>
+              {blocks.map((block) => (
+                <option key={block.id} value={block.id}>
+                  {block.title}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="soft-button px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => setIsAddTaskOpen(false)}
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleCreateTaskFromList()}
+                disabled={!newTaskTitle.trim() || !newTaskBlockId}
+              >
+                <Plus size={14} />
+                Додати
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isAddBlockOpen ? (
         <div
@@ -3128,7 +4009,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   </option>
                 ))}
               </select>
-              <div className="text-center text-xs font-semibold text-slate-500">залежить від</div>
+              <div className="text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
+                залежить від
+              </div>
               <select
                 className="soft-input px-3 py-2 text-sm"
                 value={edgeTargetId}
@@ -3152,21 +4035,21 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
             <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
               {edges.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-white/75 p-4 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white/75 p-4 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/55">
                   Поки що немає залежностей.
                 </div>
               ) : null}
               {edges.map((edge) => (
                 <div
                   key={edge.id}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/60"
                 >
-                  <div className="text-sm font-semibold text-slate-800">
+                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                     {formatEdgeName(edge, blocksById)}
                   </div>
                   <button
                     type="button"
-                    className="soft-button inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700"
+                    className="soft-button inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200"
                     onClick={() => void handleDeleteEdge(edge.id)}
                   >
                     <Unlink size={12} />
@@ -3216,7 +4099,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     type="button"
                     className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50/60"
                     onClick={() => {
-                      setSelectedBlockId(block.id);
+                      openBlockDrawer(block.id);
                       setIsBlockListOpen(false);
                     }}
                   >
@@ -3247,7 +4130,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       {selectedBlock ? (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-2 backdrop-blur-[1px] md:items-center md:p-4"
-          onClick={() => setSelectedBlockId(null)}
+          onClick={closeBlockDrawer}
         >
           <div
             className="h-[94vh] min-h-[60vh] w-full md:w-[50vw] md:max-w-[1100px]"
@@ -3258,8 +4141,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               blocks={blocks}
               tasks={selectedBlockTasks}
               allTasks={tasks}
+              autoStartCreateToken={taskDrawerCreateToken}
+              autoStartCreateBlockId={taskDrawerCreateBlockId}
               dependencyBlockedTaskIds={dependencyBlockedTaskIds}
-              onClose={() => setSelectedBlockId(null)}
+              onClose={closeBlockDrawer}
               onRenameBlock={handleRenameBlock}
               onUpdateBlockIcon={handleUpdateBlockIcon}
               onCreateTask={handleCreateTask}

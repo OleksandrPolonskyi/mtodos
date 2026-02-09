@@ -259,7 +259,7 @@ html.theme-dark .primary-button:hover {
 
 @keyframes connector-flow-travel {
   from {
-    stroke-dashoffset: 120;
+    stroke-dashoffset: 48;
   }
 
   to {
@@ -273,7 +273,7 @@ html.theme-dark .primary-button:hover {
   }
 
   to {
-    stroke-dashoffset: -120;
+    stroke-dashoffset: -48;
   }
 }
 

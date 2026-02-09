@@ -42,11 +42,13 @@ interface TaskDrawerProps {
   blocks: BusinessBlock[];
   tasks: TaskItem[];
   allTasks: TaskItem[];
+  autoStartCreateToken?: number;
+  autoStartCreateBlockId?: string | null;
   dependencyBlockedTaskIds: ReadonlySet<string>;
   onClose: () => void;
   onRenameBlock: (blockId: string, title: string) => Promise<void>;
   onUpdateBlockIcon: (blockId: string, iconName: BusinessBlock["iconName"]) => Promise<void>;
-  onCreateTask: (payload: NewTaskInput) => Promise<void>;
+  onCreateTask: (payload: NewTaskInput) => Promise<TaskItem | null>;
   onUpdateTask: (taskId: string, payload: Partial<TaskItem>) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
   onMoveTask: (taskId: string, direction: "up" | "down") => Promise<void>;
@@ -123,6 +125,32 @@ const toLocalDateString = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
+const getQuickDueDateValue = (preset: "today" | "tomorrow" | "weekend"): string => {
+  const base = new Date();
+  if (preset === "today") {
+    return toLocalDateString(base);
+  }
+
+  if (preset === "tomorrow") {
+    const tomorrow = new Date(base);
+    tomorrow.setDate(base.getDate() + 1);
+    return toLocalDateString(tomorrow);
+  }
+
+  const weekend = new Date(base);
+  const weekday = weekend.getDay();
+  if (weekday !== 6 && weekday !== 0) {
+    weekend.setDate(weekend.getDate() + (6 - weekday));
+  }
+  return toLocalDateString(weekend);
+};
+
+const quickDueDateOptions = [
+  { value: "today", label: "Сьогодні" },
+  { value: "tomorrow", label: "Завтра" },
+  { value: "weekend", label: "На вихідних" }
+] as const;
+
 const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone => {
   if (!dueDate || status === "done") {
     return "normal";
@@ -162,6 +190,8 @@ export function TaskDrawer({
   blocks,
   tasks,
   allTasks,
+  autoStartCreateToken = 0,
+  autoStartCreateBlockId = null,
   dependencyBlockedTaskIds,
   onClose,
   onRenameBlock,
@@ -177,6 +207,9 @@ export function TaskDrawer({
   const [editingChecklistByItem, setEditingChecklistByItem] = useState<Record<string, string>>({});
   const [editingTitleByTask, setEditingTitleByTask] = useState<Record<string, string>>({});
   const [creatingTask, setCreatingTask] = useState(false);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
+  const [newTaskTitleDraft, setNewTaskTitleDraft] = useState("");
+  const [taskIdToFocus, setTaskIdToFocus] = useState<string | null>(null);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [quickEditor, setQuickEditor] = useState<{
     taskId: string;
@@ -187,6 +220,8 @@ export function TaskDrawer({
   const [savingIconName, setSavingIconName] = useState<string | null>(null);
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement | null>(null);
+  const newTaskInputRef = useRef<HTMLInputElement | null>(null);
+  const previousAutoStartTokenRef = useRef<number>(-1);
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => a.order - b.order || a.updatedAt.localeCompare(b.updatedAt));
@@ -239,7 +274,47 @@ export function TaskDrawer({
   useEffect(() => {
     setQuickEditor(null);
     setEditingChecklistByItem({});
+    setIsCreateFormOpen(false);
+    setNewTaskTitleDraft("");
   }, [block?.id]);
+
+  useEffect(() => {
+    if (!isCreateFormOpen) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      newTaskInputRef.current?.focus();
+      newTaskInputRef.current?.select();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isCreateFormOpen]);
+
+  useEffect(() => {
+    if (!taskIdToFocus) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const titleInput = document.querySelector<HTMLInputElement>(
+        `[data-task-id="${taskIdToFocus}"] [data-task-title-input="true"]`
+      );
+      if (!titleInput) {
+        return;
+      }
+
+      titleInput.focus();
+      titleInput.select();
+      setTaskIdToFocus(null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [groupedTasks, taskIdToFocus]);
 
   useEffect(() => {
     if (!isIconPickerOpen) {
@@ -286,19 +361,50 @@ export function TaskDrawer({
     return () => window.removeEventListener("pointerdown", handleOutsidePointerDown);
   }, [quickEditor]);
 
-  const handleCreate = async (): Promise<void> => {
+  const handleCreate = async (
+    title: string,
+    options?: { closeForm?: boolean; focusCreatedTask?: boolean }
+  ): Promise<void> => {
     setCreatingTask(true);
 
     try {
-      await onCreateTask({
-        title: "Нова задача",
+      const createdTask = await onCreateTask({
+        title: title.trim() || "Нова задача",
         dueDate: null,
         recurrence: "none"
       });
+      if (createdTask && options?.focusCreatedTask) {
+        setExpandedTaskId(createdTask.id);
+        setEditingTitleByTask((prev) => ({
+          ...prev,
+          [createdTask.id]: createdTask.title
+        }));
+        setTaskIdToFocus(createdTask.id);
+      }
+      setNewTaskTitleDraft("");
+      if (options?.closeForm ?? true) {
+        setIsCreateFormOpen(false);
+      }
     } finally {
       setCreatingTask(false);
     }
   };
+
+  useEffect(() => {
+    if (autoStartCreateToken === previousAutoStartTokenRef.current) {
+      return;
+    }
+
+    previousAutoStartTokenRef.current = autoStartCreateToken;
+
+    if (!block || autoStartCreateBlockId !== block.id) {
+      return;
+    }
+
+    setIsCreateFormOpen(false);
+    setNewTaskTitleDraft("");
+    void handleCreate("Нова задача", { closeForm: true, focusCreatedTask: true });
+  }, [autoStartCreateBlockId, autoStartCreateToken, block]);
 
   const handleBlockRename = async (): Promise<void> => {
     if (!block) {
@@ -465,7 +571,7 @@ export function TaskDrawer({
               "inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 transition duration-100 hover:bg-sky-100 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900",
               "disabled:cursor-not-allowed disabled:opacity-60"
             )}
-            onClick={() => void handleCreate()}
+            onClick={() => setIsCreateFormOpen(true)}
           >
             <Plus size={12} />
             Нова задача
@@ -500,6 +606,52 @@ export function TaskDrawer({
         </div>
 
         <div className="space-y-3">
+          {isCreateFormOpen ? (
+            <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-2 dark:border-sky-500/55 dark:bg-sky-950/55">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={newTaskInputRef}
+                  className="soft-input flex-1 px-2.5 py-1.5 text-sm"
+                  placeholder="Назва нової задачі"
+                  value={newTaskTitleDraft}
+                  onChange={(event) => setNewTaskTitleDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleCreate(newTaskTitleDraft, { closeForm: true });
+                      return;
+                    }
+
+                    if (event.key === "Escape") {
+                      setIsCreateFormOpen(false);
+                      setNewTaskTitleDraft("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={creatingTask}
+                  className="primary-button inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void handleCreate(newTaskTitleDraft, { closeForm: true })}
+                >
+                  <Plus size={12} />
+                  Додати
+                </button>
+                <button
+                  type="button"
+                  className="soft-button inline-flex h-8 w-8 items-center justify-center"
+                  onClick={() => {
+                    setIsCreateFormOpen(false);
+                    setNewTaskTitleDraft("");
+                  }}
+                  aria-label="Скасувати створення задачі"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {ownTasks.length === 0 ? (
             <button
               type="button"
@@ -509,7 +661,7 @@ export function TaskDrawer({
                 "dark:bg-slate-900/70 dark:hover:border-sky-500 dark:hover:bg-sky-900/25",
                 creatingTask ? "cursor-not-allowed opacity-65" : ""
               )}
-              onClick={() => void handleCreate()}
+              onClick={() => setIsCreateFormOpen(true)}
             >
               Поки немає задач для тебе. Натисни <span className="font-semibold">Нова задача</span>.
             </button>
@@ -526,7 +678,6 @@ export function TaskDrawer({
               quickEditor?.taskId === task.id && quickEditor.type === "status";
             const isDueDateEditorOpen =
               quickEditor?.taskId === task.id && quickEditor.type === "dueDate";
-            const isDelegated = task.ownership === "delegated";
             const dependencyTask = task.dependsOnTaskId
               ? allTasksById.get(task.dependsOnTaskId) ?? null
               : null;
@@ -549,8 +700,7 @@ export function TaskDrawer({
                   data-task-item="true"
                   data-task-id={task.id}
                   className={cn(
-                    "rounded-xl border border-slate-200 bg-white p-3 transition-colors duration-100 dark:border-slate-700 dark:bg-slate-900/92",
-                    isDelegated ? "opacity-55 saturate-60" : ""
+                    "rounded-xl border border-slate-200 bg-white p-3 transition-colors duration-100 dark:border-slate-700 dark:bg-slate-900/92"
                   )}
                 >
                   <div className="flex items-start gap-2">
@@ -568,6 +718,7 @@ export function TaskDrawer({
 
                   <div className="min-w-0 flex-1">
                     <input
+                      data-task-title-input="true"
                       className={cn(
                         "w-full rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
                         task.status === "done"
@@ -654,6 +805,24 @@ export function TaskDrawer({
                         </button>
                         {isDueDateEditorOpen ? (
                           <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                            <div className="mb-2 grid grid-cols-3 gap-1">
+                              {quickDueDateOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className="soft-button px-2 py-1 text-[10px] font-semibold"
+                                  onClick={async (event) => {
+                                    event.stopPropagation();
+                                    await onUpdateTask(task.id, {
+                                      dueDate: getQuickDueDateValue(option.value)
+                                    });
+                                    setQuickEditor(null);
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
                             <input
                               type="date"
                               className="soft-input mb-2 w-full px-2 py-1 text-xs"
