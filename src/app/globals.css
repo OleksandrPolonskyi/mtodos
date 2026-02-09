@@ -212,15 +212,21 @@ html.theme-dark .soft-button:hover {
 }
 
 html.theme-dark .primary-button {
-  border-color: rgba(56, 189, 248, 0.55);
-  background: linear-gradient(135deg, rgba(14, 116, 144, 0.9), rgba(2, 132, 199, 0.9));
-  color: #e0f2fe;
-  box-shadow: 0 12px 30px rgba(2, 132, 199, 0.28);
+  border-color: rgba(71, 85, 105, 0.82);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+  color: #e2e8f0;
+  box-shadow:
+    0 12px 26px rgba(2, 6, 23, 0.48),
+    inset 0 1px 0 rgba(148, 163, 184, 0.14);
 }
 
 html.theme-dark .primary-button:hover {
-  box-shadow: 0 16px 36px rgba(56, 189, 248, 0.34);
-  filter: saturate(1.02);
+  border-color: rgba(100, 116, 139, 0.9);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(51, 65, 85, 0.98));
+  box-shadow:
+    0 16px 34px rgba(2, 6, 23, 0.58),
+    inset 0 1px 0 rgba(148, 163, 184, 0.18);
+  filter: none;
 }
 
 .lift-enter {
@@ -258,6 +264,16 @@ html.theme-dark .primary-button:hover {
 
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@keyframes connector-flow-travel-forward {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -120;
   }
 }
 
@@ -302,6 +318,18 @@ html.theme-dark .primary-button:hover {
 .connector-flow-glow-blocked {
   animation-duration: 6.15s, 7.35s;
   filter: drop-shadow(0 0 6px rgba(254, 243, 199, 0.8));
+}
+
+.connector-flow-core-auto {
+  animation-name: connector-flow-travel-forward, connector-flow-breathe;
+  animation-duration: 4.8s, 6.9s;
+  filter: drop-shadow(0 0 5px rgba(196, 181, 253, 0.85));
+}
+
+.connector-flow-glow-auto {
+  animation-name: connector-flow-travel-forward, connector-flow-breathe;
+  animation-duration: 6.9s, 8.4s;
+  filter: drop-shadow(0 0 9px rgba(167, 139, 250, 0.85));
 }
 
 @keyframes progress-wave-sweep {

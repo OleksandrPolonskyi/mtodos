@@ -186,9 +186,6 @@ export function TaskDrawer({
   const [savingBlockTitle, setSavingBlockTitle] = useState(false);
   const [savingIconName, setSavingIconName] = useState<string | null>(null);
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
-  const [dependencyBlockDraftByTask, setDependencyBlockDraftByTask] = useState<
-    Record<string, string>
-  >({});
   const iconPickerRef = useRef<HTMLDivElement | null>(null);
 
   const sortedTasks = useMemo(() => {
@@ -210,24 +207,26 @@ export function TaskDrawer({
 
   const blocksById = useMemo(() => new Map(blocks.map((item) => [item.id, item])), [blocks]);
   const allTasksById = useMemo(() => new Map(allTasks.map((item) => [item.id, item])), [allTasks]);
-  const dependencyBlockOptions = useMemo(() => {
-    return [...blocks].sort((a, b) => a.title.localeCompare(b.title, "uk"));
-  }, [blocks]);
-
-  const dependencyTaskOptionsByBlock = useMemo(() => {
-    const grouped: Record<string, TaskItem[]> = {};
-
-    for (const item of allTasks) {
-      grouped[item.blockId] = grouped[item.blockId] ?? [];
-      grouped[item.blockId].push(item);
-    }
-
-    for (const blockId of Object.keys(grouped)) {
-      grouped[blockId].sort((a, b) => a.order - b.order || a.updatedAt.localeCompare(b.updatedAt));
-    }
-
-    return grouped;
-  }, [allTasks]);
+  const dependencyTaskOptions = useMemo(() => {
+    return [...allTasks]
+      .map((item) => {
+        const blockTitle = blocksById.get(item.blockId)?.title ?? "Блок";
+        return {
+          id: item.id,
+          label: `${blockTitle} / ${item.title}`,
+          blockTitle,
+          order: item.order,
+          updatedAt: item.updatedAt
+        };
+      })
+      .sort((a, b) => {
+        const blockCompare = a.blockTitle.localeCompare(b.blockTitle, "uk");
+        if (blockCompare !== 0) {
+          return blockCompare;
+        }
+        return a.order - b.order || a.updatedAt.localeCompare(b.updatedAt);
+      });
+  }, [allTasks, blocksById]);
 
   useEffect(() => {
     setBlockTitleDraft(block?.title ?? "");
@@ -240,7 +239,6 @@ export function TaskDrawer({
   useEffect(() => {
     setQuickEditor(null);
     setEditingChecklistByItem({});
-    setDependencyBlockDraftByTask({});
   }, [block?.id]);
 
   useEffect(() => {
@@ -535,13 +533,9 @@ export function TaskDrawer({
             const dependencyBlock = dependencyTask
               ? blocksById.get(dependencyTask.blockId) ?? null
               : null;
-            const selectedDependencyBlockId =
-              dependencyBlockDraftByTask[task.id] ?? dependencyTask?.blockId ?? "";
-            const dependencyTaskOptions = (
-              selectedDependencyBlockId
-                ? dependencyTaskOptionsByBlock[selectedDependencyBlockId] ?? []
-                : []
-            ).filter((candidate) => candidate.id !== task.id);
+            const taskDependencyOptions = dependencyTaskOptions.filter(
+              (candidate) => candidate.id !== task.id
+            );
             const isBlockedByDependency = dependencyBlockedTaskIds.has(task.id);
 
             return (
@@ -937,50 +931,19 @@ export function TaskDrawer({
                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
                         Залежність задачі
                       </div>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                         <select
                           className="soft-input px-2 py-1 text-xs"
-                          value={selectedDependencyBlockId}
-                          onChange={async (event) => {
-                            const nextBlockId = event.target.value;
-                            setDependencyBlockDraftByTask((prev) => ({
-                              ...prev,
-                              [task.id]: nextBlockId
-                            }));
-
-                            if (!nextBlockId) {
-                              await onUpdateTask(task.id, { dependsOnTaskId: null });
-                              return;
-                            }
-
-                            if (dependencyTask && dependencyTask.blockId !== nextBlockId) {
-                              await onUpdateTask(task.id, { dependsOnTaskId: null });
-                            }
-                          }}
-                        >
-                          <option value="">Без залежності</option>
-                          {dependencyBlockOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.title}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          className="soft-input px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                           value={task.dependsOnTaskId ?? ""}
-                          disabled={!selectedDependencyBlockId}
                           onChange={async (event) => {
                             const nextTaskId = event.target.value || null;
                             await onUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
                           }}
                         >
-                          <option value="">
-                            {selectedDependencyBlockId ? "Оберіть задачу" : "Спершу обери блок"}
-                          </option>
-                          {dependencyTaskOptions.map((option) => (
+                          <option value="">Без залежності</option>
+                          {taskDependencyOptions.map((option) => (
                             <option key={option.id} value={option.id}>
-                              {option.title}
+                              {option.label}
                             </option>
                           ))}
                         </select>
@@ -989,10 +952,6 @@ export function TaskDrawer({
                           type="button"
                           className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
                           onClick={async () => {
-                            setDependencyBlockDraftByTask((prev) => ({
-                              ...prev,
-                              [task.id]: ""
-                            }));
                             await onUpdateTask(task.id, { dependsOnTaskId: null });
                           }}
                         >

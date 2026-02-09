@@ -74,6 +74,15 @@ interface EdgeAnchorOverride {
   targetSide: AnchorSide;
 }
 
+type VisualEdgeKind = "manual" | "task_dependency";
+
+interface VisualEdge {
+  id: string;
+  sourceBlockId: string;
+  targetBlockId: string;
+  kind: VisualEdgeKind;
+}
+
 const CARD_WIDTH = 272;
 const CARD_HEIGHT = 164;
 const BOARD_PADDING = 260;
@@ -1115,10 +1124,53 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     };
   }, []);
 
+  const visualEdges = useMemo<VisualEdge[]>(() => {
+    const manualEdges = edges.map((edge) => ({
+      id: edge.id,
+      sourceBlockId: edge.sourceBlockId,
+      targetBlockId: edge.targetBlockId,
+      kind: "manual" as const
+    }));
+
+    const existingPairs = new Set(
+      manualEdges.map((edge) => `${edge.sourceBlockId}::${edge.targetBlockId}`)
+    );
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    const autoEdgesByPair = new Map<string, VisualEdge>();
+
+    for (const task of tasks) {
+      if (!task.dependsOnTaskId) {
+        continue;
+      }
+
+      const dependencyTask = tasksById.get(task.dependsOnTaskId);
+      if (!dependencyTask || dependencyTask.blockId === task.blockId) {
+        continue;
+      }
+
+      // Visual flow: prerequisite task/block -> dependent task/block
+      const sourceBlockId = dependencyTask.blockId;
+      const targetBlockId = task.blockId;
+      const pairKey = `${sourceBlockId}::${targetBlockId}`;
+      if (existingPairs.has(pairKey) || autoEdgesByPair.has(pairKey)) {
+        continue;
+      }
+
+      autoEdgesByPair.set(pairKey, {
+        id: `task-link:${pairKey}`,
+        sourceBlockId,
+        targetBlockId,
+        kind: "task_dependency"
+      });
+    }
+
+    return [...manualEdges, ...autoEdgesByPair.values()];
+  }, [edges, tasks]);
+
   const edgePaths = useMemo(() => {
-    return edges
+    return visualEdges
       .map((edge) => {
-        const sideOverride = edgeAnchorOverrides[edge.id];
+        const sideOverride = edge.kind === "manual" ? edgeAnchorOverrides[edge.id] : undefined;
         const { sourceSide, targetSide } =
           sideOverride ?? chooseConnectorSides(edge.sourceBlockId, edge.targetBlockId);
         const start = getAnchorPoint(edge.sourceBlockId, sourceSide);
@@ -1131,8 +1183,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
         return {
           id: edge.id,
+          kind: edge.kind,
           d,
-          blocked: blockedMap[edge.sourceBlockId] ?? false,
+          blocked: edge.kind === "manual" ? blockedMap[edge.sourceBlockId] ?? false : false,
           startX: start.x,
           startY: start.y,
           endX: end.x,
@@ -1144,6 +1197,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           item
         ): item is {
           id: string;
+          kind: VisualEdgeKind;
           d: string;
           blocked: boolean;
           startX: number;
@@ -1152,7 +1206,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           endY: number;
         } => item !== null
       );
-  }, [blockedMap, buildConnectorPath, chooseConnectorSides, edgeAnchorOverrides, edges, getAnchorPoint]);
+  }, [
+    blockedMap,
+    buildConnectorPath,
+    chooseConnectorSides,
+    edgeAnchorOverrides,
+    getAnchorPoint,
+    visualEdges
+  ]);
 
   useEffect(() => {
     if (!linkDraft) {
@@ -1984,7 +2045,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       d={edge.d}
                       fill="none"
                       stroke={
-                        edge.blocked
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? "#6d28d9"
+                            : "#a78bfa"
+                          : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#64748b"
                             : "#d6d3d1"
@@ -1993,7 +2058,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             : "#cbd5e1"
                       }
                       strokeWidth={1.4}
-                      strokeOpacity={resolvedTheme === "dark" ? 0.56 : edge.blocked ? 0.82 : 0.78}
+                      strokeOpacity={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? 0.62
+                            : 0.72
+                          : resolvedTheme === "dark"
+                            ? 0.56
+                            : edge.blocked
+                              ? 0.82
+                              : 0.78
+                      }
                       strokeDasharray={edge.blocked ? "4 6" : undefined}
                       strokeLinecap="round"
                     />
@@ -2002,10 +2077,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       fill="none"
                       className={cn(
                         "connector-flow connector-flow-glow",
-                        edge.blocked ? "connector-flow-glow-blocked" : "connector-flow-glow-active"
+                        edge.kind === "task_dependency"
+                          ? "connector-flow-glow-auto"
+                          : edge.blocked
+                            ? "connector-flow-glow-blocked"
+                            : "connector-flow-glow-active"
                       )}
                       stroke={
-                        edge.blocked
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? "#c4b5fd"
+                            : "#8b5cf6"
+                          : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#fcd34d"
                             : "#fef3c7"
@@ -2014,8 +2097,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             : "#dbeafe"
                       }
                       strokeWidth={2.1}
-                      strokeOpacity={resolvedTheme === "dark" ? 0.64 : edge.blocked ? 0.44 : 0.46}
-                      strokeDasharray={edge.blocked ? "14 34" : "16 32"}
+                      strokeOpacity={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? 0.78
+                            : 0.56
+                          : resolvedTheme === "dark"
+                            ? 0.64
+                            : edge.blocked
+                              ? 0.44
+                              : 0.46
+                      }
+                      strokeDasharray={edge.kind === "task_dependency" ? "15 30" : edge.blocked ? "14 34" : "16 32"}
                       strokeLinecap="round"
                     />
                     <path
@@ -2023,10 +2116,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       fill="none"
                       className={cn(
                         "connector-flow connector-flow-core",
-                        edge.blocked ? "connector-flow-core-blocked" : "connector-flow-core-active"
+                        edge.kind === "task_dependency"
+                          ? "connector-flow-core-auto"
+                          : edge.blocked
+                            ? "connector-flow-core-blocked"
+                            : "connector-flow-core-active"
                       )}
                       stroke={
-                        edge.blocked
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? "#f5f3ff"
+                            : "#ede9fe"
+                          : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#fef3c7"
                             : "#fffbeb"
@@ -2035,23 +2136,55 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             : "#ffffff"
                       }
                       strokeWidth={1.1}
-                      strokeOpacity={edge.blocked ? 0.97 : 0.98}
-                      strokeDasharray={edge.blocked ? "8 40" : "8 38"}
+                      strokeOpacity={edge.kind === "task_dependency" ? 0.95 : edge.blocked ? 0.97 : 0.98}
+                      strokeDasharray={edge.kind === "task_dependency" ? "8 36" : edge.blocked ? "8 40" : "8 38"}
                       strokeLinecap="round"
                     />
                     <circle
                       cx={edge.startX}
                       cy={edge.startY}
                       r={1.8}
-                      fill={resolvedTheme === "dark" ? "#94a3b8" : "#cbd5e1"}
-                      opacity={resolvedTheme === "dark" ? 0.58 : 0.75}
+                      fill={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? "#8b5cf6"
+                            : "#a78bfa"
+                          : resolvedTheme === "dark"
+                            ? "#94a3b8"
+                            : "#cbd5e1"
+                      }
+                      opacity={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? 0.72
+                            : 0.78
+                          : resolvedTheme === "dark"
+                            ? 0.58
+                            : 0.75
+                      }
                     />
                     <circle
                       cx={edge.endX}
                       cy={edge.endY}
                       r={1.8}
-                      fill={resolvedTheme === "dark" ? "#94a3b8" : "#cbd5e1"}
-                      opacity={resolvedTheme === "dark" ? 0.58 : 0.75}
+                      fill={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? "#8b5cf6"
+                            : "#a78bfa"
+                          : resolvedTheme === "dark"
+                            ? "#94a3b8"
+                            : "#cbd5e1"
+                      }
+                      opacity={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? 0.72
+                            : 0.78
+                          : resolvedTheme === "dark"
+                            ? 0.58
+                            : 0.75
+                      }
                     />
                   </g>
                 ))}
