@@ -500,6 +500,18 @@ export function TaskDrawer({
   const activeIconOption = getBlockIconOption(resolveBlockIconName(block));
   const ActiveIcon = activeIconOption.icon;
 
+  const shouldIgnoreTaskContainerToggle = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+
+    return Boolean(
+      target.closest(
+        "button, input, textarea, select, a, label, [data-quick-editor='true'], [data-task-no-toggle='true']"
+      )
+    );
+  };
+
   return (
     <aside
       className={cn(
@@ -511,16 +523,24 @@ export function TaskDrawer({
           return;
         }
 
-        const target = event.target as HTMLElement | null;
+        const target = event.target as Element | null;
         if (!target) {
           setExpandedTaskId(null);
+          return;
+        }
+
+        // Do not collapse on interactions with controls inside tasks
+        // (e.g. Pomodoro play/pause), otherwise the first click can be swallowed.
+        if (shouldIgnoreTaskContainerToggle(target)) {
           return;
         }
 
         const taskElement = target.closest<HTMLElement>("[data-task-item='true']");
         const clickedTaskId = taskElement?.dataset.taskId ?? null;
         if (clickedTaskId !== expandedTaskId) {
-          setExpandedTaskId(null);
+          window.setTimeout(() => {
+            setExpandedTaskId((current) => (current === expandedTaskId ? null : current));
+          }, 0);
         }
       }}
     >
@@ -740,11 +760,18 @@ export function TaskDrawer({
                   className={cn(
                     "relative overflow-visible rounded-xl border bg-white p-3 transition-colors duration-100 dark:bg-slate-900/92",
                     isDependentTask
-                      ? "border-violet-300 dark:border-violet-500/70"
+                      ? "border-violet-300 hover:border-violet-400 dark:border-violet-500/70 dark:hover:border-violet-400"
                       : isDependencySourceTask
-                        ? "border-violet-200 dark:border-violet-500/45"
-                        : "border-slate-200 dark:border-slate-700"
+                        ? "border-violet-200 hover:border-violet-300 dark:border-violet-500/45 dark:hover:border-violet-500/70"
+                        : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-500"
                   )}
+                  onClick={(event) => {
+                    if (shouldIgnoreTaskContainerToggle(event.target)) {
+                      return;
+                    }
+
+                    setExpandedTaskId((current) => (current === task.id ? null : task.id));
+                  }}
                 >
                   <div className="flex items-start gap-2">
                   <button
@@ -824,7 +851,7 @@ export function TaskDrawer({
                         <button
                           type="button"
                           className={cn(
-                            "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
+                            "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs sm:text-sm font-bold uppercase tracking-[0.07em] leading-none transition duration-100 hover:brightness-95",
                             statusBadgeClasses[task.status]
                           )}
                           onClick={(event) => {
@@ -866,7 +893,7 @@ export function TaskDrawer({
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100 hover:brightness-95",
+                            "inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none transition duration-100 hover:brightness-95",
                             dueDateTagClasses[dueDateTone]
                           )}
                           onClick={(event) => {
@@ -926,13 +953,13 @@ export function TaskDrawer({
 
                       {isExpanded ? (
                         <div className="relative" data-quick-editor="true">
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
-                              task.ownership === "mine"
-                                ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
-                                : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        <button
+                          type="button"
+                          className={cn(
+                            "inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none transition duration-100",
+                            task.ownership === "mine"
+                              ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
+                              : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             )}
                             onClick={(event) => {
                               event.stopPropagation();

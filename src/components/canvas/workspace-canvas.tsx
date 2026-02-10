@@ -3520,7 +3520,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           <button
                                             type="button"
                                             className={cn(
-                                              "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100",
+                                              "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs sm:text-sm font-bold uppercase tracking-[0.07em] leading-none transition duration-100",
                                               canUseHoverInteractions ? "hover:brightness-95" : "",
                                               taskStatusBadgeClasses[computedStatus]
                                             )}
@@ -3565,7 +3565,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           <button
                                             type="button"
                                             className={cn(
-                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
+                                              "inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none transition duration-100",
                                               canUseHoverInteractions ? "hover:brightness-95" : "",
                                               dueTone === "overdue"
                                                 ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
@@ -3632,7 +3632,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             <button
                                               type="button"
                                               className={cn(
-                                                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
+                                                "inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none transition duration-100",
                                                 task.ownership === "mine"
                                                   ? canUseHoverInteractions
                                                     ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
@@ -3691,7 +3691,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         {isExpanded ? (
                                           <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                            className="inline-flex min-h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                                             onClick={(event) => {
                                               event.stopPropagation();
                                               openBlockDrawer(task.blockId);

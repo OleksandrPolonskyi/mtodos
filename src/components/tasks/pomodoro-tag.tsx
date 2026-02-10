@@ -2,7 +2,7 @@
 
 import { ChevronDown, Pause, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { TaskItem } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +20,23 @@ interface SavedState {
   sessions: number;
 }
 
+interface PomodoroRuntimeState {
+  running: boolean;
+  baseSeconds: number;
+  startedAtMs: number | null;
+  isBreakMode: boolean;
+  breakRunning: boolean;
+  breakRemainingSeconds: number;
+  isBreakPromptOpen: boolean;
+  isBreakDonePromptOpen: boolean;
+}
+
 const toNormalizedSeconds = (value: number | null | undefined): number =>
   Math.max(0, Math.floor(Number(value ?? 0)));
 
 const POMODORO_SESSION_SECONDS = 60 * 60;
 const POMODORO_BREAK_SECONDS = 15 * 60;
+const pomodoroRuntimeByTaskId = new Map<string, PomodoroRuntimeState>();
 
 const formatElapsed = (seconds: number): string => {
   const safeSeconds = Math.max(0, Math.floor(seconds));
@@ -55,6 +67,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const persistInFlightRef = useRef(false);
+  const pendingPersistSecondsRef = useRef<number | null>(null);
   const lastCompletedSessionRef = useRef<number>(
     Math.floor(toNormalizedSeconds(task.pomodoroSeconds) / POMODORO_SESSION_SECONDS)
   );
@@ -74,6 +87,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       }
 
       if (persistInFlightRef.current) {
+        pendingPersistSecondsRef.current = seconds;
         return;
       }
 
@@ -86,6 +100,13 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
         lastSavedRef.current = { seconds, sessions };
       } finally {
         persistInFlightRef.current = false;
+        if (pendingPersistSecondsRef.current !== null) {
+          const pendingSeconds = pendingPersistSecondsRef.current;
+          pendingPersistSecondsRef.current = null;
+          if (pendingSeconds !== lastSavedRef.current.seconds) {
+            void persistPomodoro(pendingSeconds);
+          }
+        }
       }
     },
     [onPersist, task.id]
@@ -136,20 +157,53 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
   }, []);
 
   useEffect(() => {
-    if (running) {
+    const nextSeconds = toNormalizedSeconds(task.pomodoroSeconds);
+    const nextSessions = Math.max(0, Math.floor(Number(task.pomodoroSessions ?? 0)));
+    const lastSaved = lastSavedRef.current;
+    const hasExternalChange =
+      nextSeconds !== lastSaved.seconds || nextSessions !== lastSaved.sessions;
+
+    if (!hasExternalChange) {
       return;
     }
 
-    const nextSeconds = toNormalizedSeconds(task.pomodoroSeconds);
+    if (running || isBreakMode || breakRunning || persistInFlightRef.current) {
+      return;
+    }
+
     setBaseSeconds(nextSeconds);
     lastCompletedSessionRef.current = Math.floor(nextSeconds / POMODORO_SESSION_SECONDS);
     lastSavedRef.current = {
       seconds: nextSeconds,
-      sessions: Math.max(0, Math.floor(Number(task.pomodoroSessions ?? 0)))
+      sessions: nextSessions
     };
-  }, [running, task.pomodoroSeconds, task.pomodoroSessions]);
+  }, [
+    breakRunning,
+    isBreakMode,
+    running,
+    task.pomodoroSeconds,
+    task.pomodoroSessions
+  ]);
 
   useEffect(() => {
+    const runtime = pomodoroRuntimeByTaskId.get(task.id);
+    if (runtime) {
+      setRunning(runtime.running);
+      setBaseSeconds(runtime.baseSeconds);
+      setStartedAtMs(runtime.startedAtMs);
+      setNowMs(Date.now());
+      setIsHistoryOpen(false);
+      setIsBreakMode(runtime.isBreakMode);
+      setBreakRunning(runtime.breakRunning);
+      setBreakRemainingSeconds(runtime.breakRemainingSeconds);
+      setIsBreakPromptOpen(runtime.isBreakPromptOpen);
+      setIsBreakDonePromptOpen(runtime.isBreakDonePromptOpen);
+      lastCompletedSessionRef.current = Math.floor(
+        runtime.baseSeconds / POMODORO_SESSION_SECONDS
+      );
+      return;
+    }
+
     setRunning(false);
     setStartedAtMs(null);
     setNowMs(Date.now());
@@ -163,6 +217,29 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       toNormalizedSeconds(task.pomodoroSeconds) / POMODORO_SESSION_SECONDS
     );
   }, [task.id]);
+
+  useEffect(() => {
+    pomodoroRuntimeByTaskId.set(task.id, {
+      running,
+      baseSeconds,
+      startedAtMs,
+      isBreakMode,
+      breakRunning,
+      breakRemainingSeconds,
+      isBreakPromptOpen,
+      isBreakDonePromptOpen
+    });
+  }, [
+    baseSeconds,
+    breakRemainingSeconds,
+    breakRunning,
+    isBreakDonePromptOpen,
+    isBreakMode,
+    isBreakPromptOpen,
+    running,
+    startedAtMs,
+    task.id
+  ]);
 
   useEffect(() => {
     if (!running) {
@@ -276,8 +353,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
   const hiddenTomatoes = Math.max(0, tomatoCount - visibleTomatoes);
 
   const handleToggle = useCallback(
-    (event: MouseEvent<HTMLButtonElement>): void => {
-      event.stopPropagation();
+    (): void => {
       if (isBreakMode) {
         setBreakRunning((current) => !current);
         return;
@@ -300,6 +376,15 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       void persistPomodoro(finalSeconds);
     },
     [baseSeconds, isBreakMode, persistPomodoro, running, startedAtMs]
+  );
+
+  const handleTogglePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleToggle();
+    },
+    [handleToggle]
   );
 
   const handleStartBreak = useCallback(() => {
@@ -327,8 +412,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
   }, []);
 
   const handleResetTimer = useCallback(
-    (event: MouseEvent<HTMLButtonElement>): void => {
-      event.stopPropagation();
+    (): void => {
       setRunning(false);
       setStartedAtMs(null);
       setBaseSeconds(0);
@@ -344,9 +428,20 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
     [persistPomodoro]
   );
 
+  const handleResetPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleResetTimer();
+    },
+    [handleResetTimer]
+  );
+
   return (
     <div
       ref={rootRef}
+      data-pomodoro-control="true"
+      data-task-no-toggle="true"
       className={cn("relative", className)}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
@@ -361,8 +456,9 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       >
         <button
           type="button"
+          data-task-no-toggle="true"
           className={cn(
-            "inline-flex h-5 w-5 items-center justify-center rounded-full border transition",
+            "inline-flex h-6 w-6 items-center justify-center rounded-full border transition",
             isBreakMode
               ? breakRunning
                 ? "border-amber-300 bg-amber-200 text-amber-800 dark:border-amber-500/60 dark:bg-amber-900/80 dark:text-amber-100"
@@ -371,7 +467,11 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
               ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-900/55 dark:text-emerald-100"
               : "border-slate-300 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
           )}
-          onClick={handleToggle}
+          onPointerDown={handleTogglePointerDown}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           aria-label={
             isBreakMode
               ? breakRunning
@@ -393,14 +493,14 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
         >
           {isBreakMode ? (
             breakRunning ? (
-              <Pause size={11} />
+              <Pause size={11} className="pointer-events-none" />
             ) : (
-              <Play size={11} className="translate-x-[0.5px]" />
+              <Play size={11} className="pointer-events-none translate-x-[0.5px]" />
             )
           ) : running ? (
-            <Pause size={11} />
+            <Pause size={11} className="pointer-events-none" />
           ) : (
-            <Play size={11} className="translate-x-[0.5px]" />
+            <Play size={11} className="pointer-events-none translate-x-[0.5px]" />
           )}
         </button>
         <span
@@ -418,19 +518,28 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
         ) : null}
         <button
           type="button"
+          data-task-no-toggle="true"
           className={cn(
-            "inline-flex h-5 w-5 items-center justify-center rounded-full transition",
+            "inline-flex h-6 w-6 items-center justify-center rounded-full transition",
             isBreakMode
               ? "text-amber-700 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-800/70"
               : "text-slate-600 hover:bg-slate-200/80 dark:text-slate-300 dark:hover:bg-slate-700/70"
           )}
-          onClick={(event) => {
+          onPointerDown={(event) => {
+            event.preventDefault();
             event.stopPropagation();
             setIsHistoryOpen((current) => !current);
           }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           aria-label="Показати Pomodoro сесії"
         >
-          <ChevronDown size={11} className={cn("transition", isHistoryOpen ? "rotate-180" : "")} />
+          <ChevronDown
+            size={11}
+            className={cn("pointer-events-none transition", isHistoryOpen ? "rotate-180" : "")}
+          />
         </button>
       </div>
 
@@ -463,7 +572,11 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
           <button
             type="button"
             className="soft-button mt-2 inline-flex w-full items-center justify-center px-2 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-100"
-            onClick={handleResetTimer}
+            onPointerDown={handleResetPointerDown}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
           >
             Скинути таймер
           </button>
