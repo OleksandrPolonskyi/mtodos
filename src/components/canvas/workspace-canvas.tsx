@@ -41,7 +41,7 @@ import type {
   TaskStatus
 } from "@/types/domain";
 import { TaskDrawer } from "@/components/tasks/task-drawer";
-import { PomodoroSection } from "@/components/tasks/pomodoro-section";
+import { PomodoroTag } from "@/components/tasks/pomodoro-tag";
 import { PwaRegister } from "@/components/pwa-register";
 import { cn } from "@/lib/utils";
 import {
@@ -2442,7 +2442,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 className={cn(
                   "px-3 py-2 text-sm font-semibold transition",
                   viewMode === "canvas"
-                    ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                    ? "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
                 onClick={(event) => {
@@ -2450,14 +2450,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   handleChangeViewMode("canvas");
                 }}
               >
-                Canvas
+                Канвас
               </button>
               <button
                 type="button"
                 className={cn(
                   "px-3 py-2 text-sm font-semibold transition",
                   viewMode === "list"
-                    ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                    ? "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
                 onClick={(event) => {
@@ -2472,7 +2472,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 className={cn(
                   "px-3 py-2 text-sm font-semibold transition",
                   viewMode === "flow"
-                    ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                    ? "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
                 onClick={(event) => {
@@ -2480,14 +2480,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   handleChangeViewMode("flow");
                 }}
               >
-                Flow
+                Потік
               </button>
             </div>
             <div className="ml-auto flex items-center gap-2">
             {viewMode === "canvas" ? (
               <button
                 type="button"
-                className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold"
+                className="soft-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-100"
                 onClick={() => setIsAddBlockOpen(true)}
               >
                 <Plus size={15} />
@@ -2496,7 +2496,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
             ) : (
               <button
                 type="button"
-                className="primary-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                className="soft-button inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={openCreateTaskModal}
                 disabled={blocks.length === 0}
               >
@@ -2962,12 +2962,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     "dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]",
                     "border-slate-200/85 bg-white dark:border-slate-700/90 dark:bg-slate-900/92",
                     draggingBlockId === block.id
-                      ? "z-20 border-sky-300 shadow-[0_24px_42px_rgba(14,165,233,0.24)] dark:border-sky-500 dark:shadow-[0_24px_48px_rgba(56,189,248,0.28)]"
+                      ? "z-20 border-slate-400 shadow-[0_24px_42px_rgba(15,23,42,0.2)] dark:border-slate-500 dark:shadow-[0_24px_48px_rgba(2,6,23,0.52)]"
                       : canUseHoverInteractions
-                        ? "hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/70 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
+                        ? "hover:-translate-y-0.5 hover:border-slate-300 dark:hover:border-slate-500"
                         : "",
                     selectedBlockId === block.id || selectedCanvasBlockIds.includes(block.id)
-                      ? "ring-2 ring-sky-300/70 dark:ring-sky-500/70"
+                      ? "ring-2 ring-slate-300/70 dark:ring-slate-500/70"
                       : "",
                     linkDraft?.sourceBlockId === block.id ? "ring-2 ring-amber-300/80 dark:ring-amber-400/80" : ""
                   )}
@@ -3087,15 +3087,23 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 key={task.id}
                                 type="button"
                                   className={cn(
-                                    "flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
+                                    "flex w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
                                     canUseHoverInteractions
-                                      ? "text-slate-700 hover:bg-slate-50/60 dark:text-slate-200 dark:hover:bg-slate-800/55"
+                                      ? isDependentTask
+                                        ? "text-slate-700 hover:border-violet-400 dark:text-slate-200 dark:hover:border-violet-400"
+                                        : isDependencySourceTask
+                                          ? "text-slate-700 hover:border-violet-300 dark:text-slate-200 dark:hover:border-violet-500/70"
+                                          : taskDueTone === "overdue"
+                                            ? "text-slate-700 hover:border-rose-300 dark:text-slate-200 dark:hover:border-rose-400"
+                                            : taskDueTone === "warning"
+                                              ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
+                                              : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
                                       : "text-slate-700 dark:text-slate-200",
                                     isDependentTask
                                       ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
                                       : isDependencySourceTask
                                         ? "ring-1 ring-violet-200/70 dark:ring-violet-500/40"
-                                      : ""
+                                        : ""
                                 )}
                                 onPointerDown={(event) => {
                                   event.stopPropagation();
@@ -3196,14 +3204,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
             }}
           >
             <div className="mx-auto max-w-6xl space-y-3">
-              {viewMode === "flow" ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/92">
-                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Потоки задач (Flow)
-                  </div>
-                </div>
-              ) : null}
-
               {viewMode !== "flow" && taskSectionsForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
                   Немає задач.
@@ -3211,7 +3211,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               ) : null}
               {viewMode === "flow" && flowChainsForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
-                  Немає потоків. Додай залежності між задачами, щоб побачити Flow.
+                  Немає потоків. Додай залежності між задачами, щоб побачити Потік.
                 </div>
               ) : null}
 
@@ -3251,7 +3251,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            Flow {flowIndex + 1}
+                            Потік {flowIndex + 1}
                           </div>
                           <div className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
                             {flow.steps.length} кроки
@@ -3401,20 +3401,24 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                     setExpandedListTaskId((current) => (current === task.id ? null : task.id))
                                   }
                                 className={cn(
-                                  "task-card-hover group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
+                                  "group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
                                   taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
                                   draggingTaskIdInList === task.id ? "opacity-45" : "",
-                                  dueTone === "overdue"
+                                  task.ownership === "delegated"
                                     ? canUseHoverInteractions
-                                      ? "border-rose-200 bg-rose-100 hover:bg-rose-200/70 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:bg-rose-900/80"
-                                      : "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
-                                    : dueTone === "warning"
+                                      ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
+                                      : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
+                                    : dueTone === "overdue"
                                       ? canUseHoverInteractions
-                                        ? "border-amber-200 bg-amber-100 hover:bg-amber-200/70 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:bg-amber-900/80"
-                                        : "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
-                                      : canUseHoverInteractions
-                                        ? "border-slate-200 bg-white hover:bg-slate-50/65 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:bg-slate-800/55"
-                                        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
+                                        ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
+                                        : "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
+                                      : dueTone === "warning"
+                                        ? canUseHoverInteractions
+                                          ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
+                                          : "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
+                                        : canUseHoverInteractions
+                                          ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
+                                          : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
                                 )}
                               >
                                   <div className="flex items-start gap-2.5">
@@ -3446,7 +3450,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           "text-base font-semibold break-words whitespace-normal",
                                           task.status === "done"
                                             ? "text-slate-500 line-through dark:text-slate-400"
-                                            : "text-slate-900 dark:text-slate-100"
+                                            : dueTone === "overdue"
+                                              ? "text-rose-700 dark:text-rose-300"
+                                              : dueTone === "warning"
+                                                ? "text-amber-700 dark:text-amber-300"
+                                                : "text-slate-900 dark:text-slate-100"
                                         )}
                                       >
                                         {isExpanded ? (
@@ -3455,7 +3463,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               "w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-md border border-transparent bg-transparent px-1 py-0.5 text-base font-semibold leading-tight outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
                                               task.status === "done"
                                                 ? "text-slate-500 line-through dark:text-slate-400"
-                                                : "text-slate-900 dark:text-slate-100"
+                                                : dueTone === "overdue"
+                                                  ? "text-rose-700 dark:text-rose-300"
+                                                  : dueTone === "warning"
+                                                    ? "text-amber-700 dark:text-amber-300"
+                                                    : "text-slate-900 dark:text-slate-100"
                                             )}
                                             rows={1}
                                             value={draftTitle}
@@ -3492,7 +3504,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               "w-full whitespace-normal break-words px-1 py-0.5 text-base font-semibold leading-tight",
                                               task.status === "done"
                                                 ? "text-slate-500 line-through dark:text-slate-400"
-                                                : "text-slate-900 dark:text-slate-100"
+                                                : dueTone === "overdue"
+                                                  ? "text-rose-700 dark:text-rose-300"
+                                                  : dueTone === "warning"
+                                                    ? "text-amber-700 dark:text-amber-300"
+                                                    : "text-slate-900 dark:text-slate-100"
                                             )}
                                           >
                                             {task.title}
@@ -3603,6 +3619,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             </div>
                                           ) : null}
                                         </div>
+                                        {task.ownership !== "delegated" ? (
+                                          <PomodoroTag
+                                            task={task}
+                                            onPersist={async (taskId, payload) => {
+                                              await handleUpdateTask(taskId, payload);
+                                            }}
+                                          />
+                                        ) : null}
                                         {isExpanded ? (
                                           <div className="relative" data-list-quick-editor="true">
                                             <button
@@ -3914,14 +3938,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
                                             </button>
                                           )}
-
-                                          <PomodoroSection
-                                            task={task}
-                                            onPersist={async (taskId, payload) => {
-                                              await handleUpdateTask(taskId, payload);
-                                            }}
-                                            className="mb-3"
-                                          />
 
                                           <div className="flex justify-end">
                                             <button

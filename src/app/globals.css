@@ -212,36 +212,36 @@ html.theme-dark .soft-button {
 }
 
 .soft-button:hover {
-  border-color: rgba(56, 189, 248, 0.45);
+  border-color: rgba(100, 116, 139, 0.58);
 }
 
 html.theme-dark .soft-button:hover {
-  border-color: rgba(56, 189, 248, 0.52);
+  border-color: rgba(148, 163, 184, 0.6);
 }
 
 .primary-button {
   border-radius: 12px;
-  border: 1px solid rgba(8, 145, 178, 0.6);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.94), rgba(8, 145, 178, 0.94));
-  color: #ecfeff;
-  transition: border-color 100ms ease, background-color 100ms ease, filter 100ms ease, color 100ms ease;
+  border: 1px solid rgba(100, 116, 139, 0.62);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  transition: border-color 100ms ease, background-color 100ms ease, color 100ms ease;
 }
 
 .primary-button:hover {
-  filter: saturate(1.08);
+  border-color: rgba(71, 85, 105, 0.72);
+  background: rgba(248, 250, 252, 0.98);
 }
 
 html.theme-dark .primary-button {
-  border-color: rgba(71, 85, 105, 0.82);
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+  border-color: rgba(100, 116, 139, 0.82);
+  background: rgba(15, 23, 42, 0.9);
   color: #e2e8f0;
   box-shadow: none;
 }
 
 html.theme-dark .primary-button:hover {
-  border-color: rgba(100, 116, 139, 0.9);
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(51, 65, 85, 0.98));
-  filter: none;
+  border-color: rgba(148, 163, 184, 0.62);
+  background: rgba(30, 41, 59, 0.95);
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -258,14 +258,15 @@ html.theme-dark .primary-button:hover {
   }
 
   .primary-button:hover {
-    border-color: rgba(8, 145, 178, 0.6);
-    background: linear-gradient(135deg, rgba(14, 165, 233, 0.94), rgba(8, 145, 178, 0.94));
-    filter: none;
+    border-color: rgba(100, 116, 139, 0.62);
+    background: rgba(255, 255, 255, 0.94);
+    color: #0f172a;
   }
 
   html.theme-dark .primary-button:hover {
-    border-color: rgba(71, 85, 105, 0.82);
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+    border-color: rgba(100, 116, 139, 0.82);
+    background: rgba(15, 23, 42, 0.9);
+    color: #e2e8f0;
   }
 }
 
@@ -456,10 +457,6 @@ html.theme-dark .hover\:bg-slate-100:hover {
 html.theme-dark .hover\:bg-sky-50\/60:hover,
 html.theme-dark .hover\:bg-sky-50\/70:hover {
   background-color: rgba(12, 74, 110, 0.28) !important;
-}
-
-html.theme-dark .task-card-hover:hover {
-  background-color: rgba(41, 52, 72, 0.7) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

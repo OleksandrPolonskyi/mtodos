@@ -26,7 +26,7 @@ import {
   getBlockIconOption,
   resolveBlockIconName
 } from "@/lib/block-icons";
-import { PomodoroSection } from "@/components/tasks/pomodoro-section";
+import { PomodoroTag } from "@/components/tasks/pomodoro-tag";
 import { cn } from "@/lib/utils";
 
 interface NewTaskInput {
@@ -185,7 +185,7 @@ const dueDateTagClasses: Record<DueDateTone, string> = {
 
 const taskTitleToneClasses: Record<DueDateTone, string> = {
   normal: "text-slate-900 dark:text-slate-100",
-  warning: "text-amber-700 dark:text-amber-300",
+  warning: "text-slate-900 dark:text-slate-100",
   overdue: "text-rose-700 dark:text-rose-300"
 };
 
@@ -915,6 +915,15 @@ export function TaskDrawer({
                         ) : null}
                       </div>
 
+                      {task.ownership !== "delegated" ? (
+                        <PomodoroTag
+                          task={task}
+                          onPersist={async (taskId, payload) => {
+                            await onUpdateTask(taskId, payload);
+                          }}
+                        />
+                      ) : null}
+
                       {isExpanded ? (
                         <div className="relative" data-quick-editor="true">
                           <button
@@ -1235,14 +1244,6 @@ export function TaskDrawer({
                         {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
                       </button>
                     )}
-
-                    <PomodoroSection
-                      task={task}
-                      onPersist={async (taskId, payload) => {
-                        await onUpdateTask(taskId, payload);
-                      }}
-                      className="mb-3"
-                    />
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex gap-2">
