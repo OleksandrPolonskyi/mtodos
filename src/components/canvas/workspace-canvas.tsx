@@ -63,7 +63,6 @@ interface WorkspaceCanvasProps {
 
 type WorkspaceViewMode = "canvas" | "list" | "flow";
 type TaskListSortMode = "default" | "custom";
-type TaskListScope = "active" | "completed";
 type AnchorSide = "left" | "right" | "top" | "bottom";
 
 interface LinkDraftState {
@@ -108,7 +107,6 @@ const blockTypeOptions: Array<{ value: BlockType; label: string; color: string }
 ];
 
 const openTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "blocked"]);
-type BlockDueTone = "normal" | "warning" | "overdue";
 type TaskDueTone = "normal" | "warning" | "overdue";
 
 const taskStatusOrder: Record<TaskStatus, number> = {
@@ -244,6 +242,8 @@ const formatEdgeName = (edge: BlockEdge, blocksById: Map<string, BusinessBlock>)
 export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.ReactElement {
   const canvasSectionRef = useRef<HTMLElement | null>(null);
   const boardViewportRef = useRef<HTMLDivElement | null>(null);
+  const listViewportRef = useRef<HTMLDivElement | null>(null);
+  const listScrollTopRef = useRef(0);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(1);
   const pinchStateRef = useRef<{ distance: number; initialZoom: number } | null>(null);
@@ -281,7 +281,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [zoom, setZoom] = useState(1);
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>("list");
   const [taskListSortMode, setTaskListSortMode] = useState<TaskListSortMode>("default");
-  const [taskListScope, setTaskListScope] = useState<TaskListScope>("active");
+  const [showCompletedBySection, setShowCompletedBySection] = useState<{
+    mine: boolean;
+    delegated: boolean;
+  }>({
+    mine: false,
+    delegated: false
+  });
   const [taskListManualOrder, setTaskListManualOrder] = useState<string[]>([]);
   const [draggingTaskIdInList, setDraggingTaskIdInList] = useState<string | null>(null);
   const [expandedListTaskId, setExpandedListTaskId] = useState<string | null>(null);
@@ -291,13 +297,16 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   } | null>(null);
   const [listTaskTitleDrafts, setListTaskTitleDrafts] = useState<Record<string, string>>({});
   const [listChecklistDrafts, setListChecklistDrafts] = useState<Record<string, string>>({});
+  const [listChecklistComposerOpenByTask, setListChecklistComposerOpenByTask] = useState<Record<string, boolean>>({});
   const [listEditingChecklistByItem, setListEditingChecklistByItem] = useState<Record<string, string>>({});
+  const [listDependencyEditorOpenByTask, setListDependencyEditorOpenByTask] = useState<Record<string, boolean>>({});
   const [taskDrawerCreateToken, setTaskDrawerCreateToken] = useState(0);
   const [taskDrawerCreateBlockId, setTaskDrawerCreateBlockId] = useState<string | null>(null);
   const [canvasTitle, setCanvasTitle] = useState(DEFAULT_CANVAS_TITLE);
   const [canvasTitleDraft, setCanvasTitleDraft] = useState(DEFAULT_CANVAS_TITLE);
   const [savingCanvasTitle, setSavingCanvasTitle] = useState(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
+  const [canUseHoverInteractions, setCanUseHoverInteractions] = useState(false);
   const [linkDraft, setLinkDraft] = useState<LinkDraftState | null>(null);
   const [linkPointer, setLinkPointer] = useState<{ x: number; y: number } | null>(null);
   const [edgeAnchorOverrides, setEdgeAnchorOverrides] = useState<Record<string, EdgeAnchorOverride>>({});
@@ -398,6 +407,32 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       media.removeEventListener("change", handleMedia);
     };
   }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = (): void => {
+      setCanUseHoverInteractions(query.matches);
+    };
+
+    sync();
+    query.addEventListener("change", sync);
+    return () => {
+      query.removeEventListener("change", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (canUseHoverInteractions) {
+      return;
+    }
+
+    setHoveredBlockId(null);
+    setSelectedCanvasBlockIds([]);
+    setSelectionRect(null);
+    setIsMarqueeSelecting(false);
+    setLinkDraft(null);
+    setLinkPointer(null);
+  }, [canUseHoverInteractions]);
 
   useEffect(() => {
     try {
@@ -526,6 +561,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       const target = event.target as HTMLElement | null;
       if (!target) {
         setListQuickEditor(null);
+        setListDependencyEditorOpenByTask({});
         return;
       }
 
@@ -534,6 +570,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       }
 
       setListQuickEditor(null);
+      setListDependencyEditorOpenByTask({});
     };
 
     window.addEventListener("pointerdown", handleOutsidePointerDown);
@@ -550,6 +587,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       if (!target) {
         setExpandedListTaskId(null);
         setListQuickEditor(null);
+        setListChecklistComposerOpenByTask({});
+        setListDependencyEditorOpenByTask({});
         return;
       }
 
@@ -563,6 +602,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       setExpandedListTaskId(null);
       setListQuickEditor(null);
+      setListChecklistComposerOpenByTask({});
+      setListDependencyEditorOpenByTask({});
     };
 
     window.addEventListener("pointerdown", handleOutsideTaskPointerDown);
@@ -574,6 +615,22 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       setExpandedListTaskId(null);
       setListQuickEditor(null);
     }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "list") {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const viewport = listViewportRef.current;
+      if (!viewport) {
+        return;
+      }
+      viewport.scrollTop = listScrollTopRef.current;
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, [viewMode]);
 
   useEffect(() => {
@@ -926,37 +983,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     return metrics;
   }, [dependencyBlockedTaskIds, tasks]);
 
-  const blockDueToneByBlock = useMemo(() => {
-    const tones: Record<string, BlockDueTone> = {};
-    const today = new Date();
-    const todayStr = toLocalDateString(today);
-    const warningBorder = new Date(today);
-    warningBorder.setDate(today.getDate() + 1);
-    const warningBorderStr = toLocalDateString(warningBorder);
-
-    for (const task of tasks) {
-      if (!openTaskStatuses.has(task.status) || !task.dueDate) {
-        continue;
-      }
-
-      const currentTone = tones[task.blockId] ?? "normal";
-      if (currentTone === "overdue") {
-        continue;
-      }
-
-      if (task.dueDate < todayStr) {
-        tones[task.blockId] = "overdue";
-        continue;
-      }
-
-      if (task.dueDate <= warningBorderStr) {
-        tones[task.blockId] = "warning";
-      }
-    }
-
-    return tones;
-  }, [tasks]);
-
   const flowInsights = useMemo(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     const outgoing = new Map<string, string[]>();
@@ -1186,17 +1212,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           dependencyBlock
         };
       })
-      .filter((item) => {
-        if (!item.block) {
-          return false;
-        }
-
-        if (taskListScope === "active") {
-          return item.computedStatus !== "done";
-        }
-
-        return item.computedStatus === "done";
-      });
+      .filter((item) => Boolean(item.block));
 
     visible.sort((a, b) => {
       if (taskListSortMode === "custom") {
@@ -1223,24 +1239,30 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     });
 
     return visible;
-  }, [blocksById, dependencyBlockedTaskIds, taskListManualOrder, taskListScope, taskListSortMode, tasks]);
+  }, [blocksById, dependencyBlockedTaskIds, taskListManualOrder, taskListSortMode, tasks]);
 
   const taskSectionsForList = useMemo(() => {
     const myTasks = sortedTasksForList.filter((item) => item.task.ownership === "mine");
     const delegatedTasks = sortedTasksForList.filter((item) => item.task.ownership === "delegated");
+    const myActive = myTasks.filter((item) => item.computedStatus !== "done");
+    const myCompleted = myTasks.filter((item) => item.computedStatus === "done");
+    const delegatedActive = delegatedTasks.filter((item) => item.computedStatus !== "done");
+    const delegatedCompleted = delegatedTasks.filter((item) => item.computedStatus === "done");
 
     return [
       {
-        id: "mine",
+        id: "mine" as const,
         title: "Мої задачі",
-        items: myTasks
+        activeItems: myActive,
+        completedItems: myCompleted
       },
       {
-        id: "delegated",
+        id: "delegated" as const,
         title: "Делеговано",
-        items: delegatedTasks
+        activeItems: delegatedActive,
+        completedItems: delegatedCompleted
       }
-    ].filter((section) => section.items.length > 0);
+    ].filter((section) => section.activeItems.length > 0 || section.completedItems.length > 0);
   }, [sortedTasksForList]);
 
   const moveManualTaskOrder = useCallback((draggedTaskId: string, targetTaskId: string): void => {
@@ -1261,18 +1283,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       return next;
     });
   }, []);
-
-  const dependencyCount = useMemo(() => {
-    const dependsOn: Record<string, number> = {};
-    const requiredBy: Record<string, number> = {};
-
-    for (const edge of edges) {
-      dependsOn[edge.sourceBlockId] = (dependsOn[edge.sourceBlockId] ?? 0) + 1;
-      requiredBy[edge.targetBlockId] = (requiredBy[edge.targetBlockId] ?? 0) + 1;
-    }
-
-    return { dependsOn, requiredBy };
-  }, [edges]);
 
   const persistPositions = useCallback(
     async (positions: Array<{ id: string; x: number; y: number }>) => {
@@ -1746,7 +1756,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       }
 
       const dragBlockIds =
-        selectedCanvasBlockIds.includes(blockId) && selectedCanvasBlockIds.length > 1
+        canUseHoverInteractions &&
+        selectedCanvasBlockIds.includes(blockId) &&
+        selectedCanvasBlockIds.length > 1
           ? selectedCanvasBlockIds
           : [blockId];
       const startPositions = dragBlockIds.reduce<Record<string, { x: number; y: number }>>(
@@ -1766,9 +1778,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       event.preventDefault();
       event.stopPropagation();
 
-      setSelectedCanvasBlockIds((previous) =>
-        previous.includes(blockId) && previous.length > 1 ? previous : [blockId]
-      );
+      if (canUseHoverInteractions) {
+        setSelectedCanvasBlockIds((previous) =>
+          previous.includes(blockId) && previous.length > 1 ? previous : [blockId]
+        );
+      } else {
+        setSelectedCanvasBlockIds([]);
+      }
 
       dragStateRef.current = {
         blockId,
@@ -1783,7 +1799,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       setDraggingBlockId(blockId);
     },
-    [blocksById, linkDraft, selectedCanvasBlockIds]
+    [blocksById, canUseHoverInteractions, linkDraft, selectedCanvasBlockIds]
   );
 
   const handleCanvasBoardPointerDown = useCallback(
@@ -1791,6 +1807,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       if (linkDraft) {
         setLinkDraft(null);
         setLinkPointer(null);
+        return;
+      }
+
+      if (!canUseHoverInteractions) {
         return;
       }
 
@@ -1813,11 +1833,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       };
       setIsMarqueeSelecting(true);
     },
-    [clientToBoardPoint, linkDraft]
+    [canUseHoverInteractions, clientToBoardPoint, linkDraft]
   );
 
   useEffect(() => {
-    if (!isMarqueeSelecting) {
+    if (!isMarqueeSelecting || !canUseHoverInteractions) {
       return;
     }
 
@@ -1890,7 +1910,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [clientToBoardPoint, isMarqueeSelecting, positionedBlocks]);
+  }, [canUseHoverInteractions, clientToBoardPoint, isMarqueeSelecting, positionedBlocks]);
 
   const handleAnchorPointerDown = useCallback(
     async (
@@ -2323,6 +2343,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
   const handleChangeViewMode = useCallback(
     (nextMode: WorkspaceViewMode): void => {
+      if (viewMode === "list") {
+        const listViewport = listViewportRef.current;
+        if (listViewport) {
+          listScrollTopRef.current = listViewport.scrollTop;
+        }
+      }
+
       if (nextMode === "canvas") {
         shouldCenterCanvasRef.current = true;
       }
@@ -2333,7 +2360,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         setLinkPointer(null);
       }
     },
-    []
+    [viewMode]
   );
 
   const handleThemeModeChange = useCallback((nextMode: ThemeMode): void => {
@@ -2379,35 +2406,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
         <div className="canvas-grid-overlay pointer-events-none absolute inset-0 z-0 opacity-20 dark:opacity-38 [background-image:linear-gradient(rgba(15,23,42,0.09)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.09)_1px,transparent_1px)] dark:[background-image:linear-gradient(rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.14)_1px,transparent_1px)] [background-size:36px_36px]" />
 
-        <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex flex-wrap items-start justify-between gap-3 md:inset-x-4 md:top-4">
-          <div className="pointer-events-auto px-1 py-1">
-            <input
-              className={cn(
-                "font-display w-[min(72vw,520px)] rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold tracking-tight text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white/90 md:text-lg",
-                "dark:text-slate-100 dark:focus:border-slate-600 dark:focus:bg-slate-900/80",
-                savingCanvasTitle ? "opacity-70" : ""
-              )}
-              value={canvasTitleDraft}
-              onChange={(event) => setCanvasTitleDraft(event.target.value)}
-              onBlur={() => {
-                void handleCanvasTitleUpdate();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                  return;
-                }
-
-                if (event.key === "Escape") {
-                  setCanvasTitleDraft(canvasTitle);
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-          </div>
-
-          <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white/90 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-30 md:inset-x-4 md:top-4">
+          <div className="pointer-events-auto relative flex items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 md:absolute md:left-1/2 md:-translate-x-1/2">
               <button
                 type="button"
                 className={cn(
@@ -2416,7 +2417,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
-                onClick={() => handleChangeViewMode("canvas")}
+                onClick={(event) => {
+                  event.currentTarget.blur();
+                  handleChangeViewMode("canvas");
+                }}
               >
                 Canvas
               </button>
@@ -2428,7 +2432,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
-                onClick={() => handleChangeViewMode("list")}
+                onClick={(event) => {
+                  event.currentTarget.blur();
+                  handleChangeViewMode("list");
+                }}
               >
                 Список
               </button>
@@ -2440,11 +2447,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
                     : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
-                onClick={() => handleChangeViewMode("flow")}
+                onClick={(event) => {
+                  event.currentTarget.blur();
+                  handleChangeViewMode("flow");
+                }}
               >
                 Flow
               </button>
             </div>
+            <div className="ml-auto flex items-center gap-2">
             {viewMode === "canvas" ? (
               <button
                 type="button"
@@ -2516,6 +2527,50 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     <RefreshCcw size={15} />
                     Оновити
                   </button>
+                  <div className="my-1 border-t border-slate-200/80 dark:border-slate-700/80" />
+                  <div className="px-2 pb-1 pt-0.5">
+                    <div className="mb-1 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                      Назва канваса
+                    </div>
+                    <input
+                      className={cn(
+                        "soft-input w-full px-2 py-1.5 text-xs font-semibold",
+                        savingCanvasTitle ? "opacity-70" : ""
+                      )}
+                      value={canvasTitleDraft}
+                      onChange={(event) => setCanvasTitleDraft(event.target.value)}
+                      onBlur={() => {
+                        void handleCanvasTitleUpdate();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                          return;
+                        }
+
+                        if (event.key === "Escape") {
+                          setCanvasTitleDraft(canvasTitle);
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  </div>
+                  {viewMode === "list" ? (
+                    <div className="px-2 pb-1 pt-1">
+                      <div className="mb-1 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                        Сортування списку
+                      </div>
+                      <select
+                        className="soft-input w-full px-2 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-100"
+                        value={taskListSortMode}
+                        onChange={(event) => setTaskListSortMode(event.target.value as TaskListSortMode)}
+                        aria-label="Сортування списку задач"
+                      >
+                        <option value="default">Дефолтний</option>
+                        <option value="custom">Кастомний (drag)</option>
+                      </select>
+                    </div>
+                  ) : null}
                   <div className="my-1 border-t border-slate-200/80 dark:border-slate-700/80" />
                   <div className="px-1 pb-1 pt-0.5">
                     <div className="mb-1 px-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
@@ -2598,6 +2653,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 </div>
               ) : null}
             </div>
+            </div>
           </div>
         </div>
 
@@ -2605,7 +2661,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           <div className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-2">
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-md backdrop-blur transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 backdrop-blur transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
               onClick={() => zoomByFactor(1 / 1.12)}
               aria-label="Зменшити масштаб"
             >
@@ -2613,7 +2669,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
             </button>
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-md backdrop-blur transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 backdrop-blur transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 dark:hover:bg-slate-800"
               onClick={() => zoomByFactor(1.12)}
               aria-label="Збільшити масштаб"
             >
@@ -2876,18 +2932,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   className={cn(
                     "group absolute z-10 w-[272px] cursor-grab rounded-2xl border p-3 shadow-[0_14px_30px_rgba(15,23,42,0.14)] transition duration-100 active:cursor-grabbing",
                     "dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]",
-                    blockDueToneByBlock[block.id] === "overdue"
-                      ? "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
-                      : blockDueToneByBlock[block.id] === "warning"
-                        ? "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
-                        : "border-slate-200/85 bg-white dark:border-slate-700/90 dark:bg-slate-900/92",
+                    "border-slate-200/85 bg-white dark:border-slate-700/90 dark:bg-slate-900/92",
                     draggingBlockId === block.id
                       ? "z-20 border-sky-300 shadow-[0_24px_42px_rgba(14,165,233,0.24)] dark:border-sky-500 dark:shadow-[0_24px_48px_rgba(56,189,248,0.28)]"
-                      : blockDueToneByBlock[block.id] === "overdue"
-                        ? "hover:-translate-y-0.5 hover:border-rose-300 hover:bg-rose-100/70 dark:hover:border-rose-400 dark:hover:bg-rose-900/45"
-                        : blockDueToneByBlock[block.id] === "warning"
-                          ? "hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-100/70 dark:hover:border-amber-400 dark:hover:bg-amber-900/40"
-                          : "hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/70 dark:hover:border-sky-500 dark:hover:bg-sky-900/30",
+                      : canUseHoverInteractions
+                        ? "hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/70 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
+                        : "",
                     selectedBlockId === block.id || selectedCanvasBlockIds.includes(block.id)
                       ? "ring-2 ring-sky-300/70 dark:ring-sky-500/70"
                       : "",
@@ -2899,8 +2949,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     touchAction: "none",
                     userSelect: "none"
                   }}
-                  onPointerEnter={() => setHoveredBlockId(block.id)}
-                  onPointerLeave={() => setHoveredBlockId((current) => (current === block.id ? null : current))}
+                  onPointerEnter={() => {
+                    if (!canUseHoverInteractions) {
+                      return;
+                    }
+                    setHoveredBlockId(block.id);
+                  }}
+                  onPointerLeave={() => {
+                    if (!canUseHoverInteractions) {
+                      return;
+                    }
+                    setHoveredBlockId((current) => (current === block.id ? null : current));
+                  }}
                   onPointerDown={(event) => startBlockDrag(event, block.id)}
                   data-canvas-block-card="true"
                 >
@@ -2915,9 +2975,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       blocked: 0,
                       totalOpen: 0
                     };
-                    const dependsOn = dependencyCount.dependsOn[block.id] ?? 0;
-                    const requiredBy = dependencyCount.requiredBy[block.id] ?? 0;
-                    const showAnchors = hoveredBlockId === block.id || linkDraft !== null;
+                    const showAnchors = (canUseHoverInteractions && hoveredBlockId === block.id) || linkDraft !== null;
                     const hasInProgress = workflow.inProgress > 0;
                     const indicatorColor = hasInProgress ? "#22c55e" : "#94a3b8";
                     const blockTasksPreview = tasks
@@ -2968,17 +3026,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             </div>
                           </div>
                           <div className="mt-1 flex items-center gap-2">
-                            <span
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2 py-1 text-[11px] sm:text-xs font-semibold text-slate-600 transition-all duration-100 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300",
-                                hoveredBlockId === block.id
-                                  ? "translate-x-0 opacity-100"
-                                  : "pointer-events-none translate-x-1 opacity-0"
-                              )}
-                            >
-                              <Link2 size={11} />
-                              {dependsOn} → {requiredBy}
-                            </span>
                             <span className="relative inline-flex h-3 w-3 items-center justify-center">
                               {hasInProgress ? (
                                 <span
@@ -3011,13 +3058,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               <button
                                 key={task.id}
                                 type="button"
-                                className={cn(
-                                  "flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
-                                  "text-slate-700 hover:bg-slate-100/70 dark:text-slate-200 dark:hover:bg-slate-800/70",
-                                  isDependentTask
-                                    ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
-                                    : isDependencySourceTask
-                                      ? "ring-1 ring-violet-200/70 dark:ring-violet-500/40"
+                                  className={cn(
+                                    "flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
+                                    canUseHoverInteractions
+                                      ? "text-slate-700 hover:bg-slate-50/60 dark:text-slate-200 dark:hover:bg-slate-800/55"
+                                      : "text-slate-700 dark:text-slate-200",
+                                    isDependentTask
+                                      ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
+                                      : isDependencySourceTask
+                                        ? "ring-1 ring-violet-200/70 dark:ring-violet-500/40"
                                       : ""
                                 )}
                                 onPointerDown={(event) => {
@@ -3032,7 +3081,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               >
                                 <button
                                   type="button"
-                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                  className={cn(
+                                    "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                                    canUseHoverInteractions
+                                      ? "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                      : ""
+                                  )}
                                   onPointerDown={(event) => {
                                     event.stopPropagation();
                                     event.preventDefault();
@@ -3079,7 +3133,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
                           <button
                             type="button"
-                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-1 py-1 text-[11px] sm:text-xs font-semibold text-sky-700 transition duration-100 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
+                            className={cn(
+                              "inline-flex w-full items-center justify-center gap-1.5 rounded-md px-1 py-1 text-[11px] sm:text-xs font-semibold text-sky-700 transition duration-100 dark:text-sky-300",
+                              canUseHoverInteractions ? "hover:text-sky-800 dark:hover:text-sky-200" : ""
+                            )}
                             onPointerDown={(event) => {
                               event.stopPropagation();
                               event.preventDefault();
@@ -3103,60 +3160,25 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
             </div>
           </div>
         ) : (
-          <div className="absolute inset-0 z-10 overflow-auto px-4 pb-20 pt-[152px] md:px-6 md:pb-24 md:pt-[114px]">
+          <div
+            ref={listViewportRef}
+            className="absolute inset-0 z-10 overflow-auto px-4 pb-20 pt-[65px] md:px-6 md:pb-24 md:pt-[106px]"
+            onScroll={(event) => {
+              listScrollTopRef.current = event.currentTarget.scrollTop;
+            }}
+          >
             <div className="mx-auto max-w-6xl space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/92">
-                {viewMode === "list" ? (
-                  <>
-                    <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-3 py-1.5 text-xs font-semibold transition",
-                          taskListScope === "active"
-                            ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
-                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                        )}
-                        onClick={() => setTaskListScope("active")}
-                      >
-                        В роботі
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-3 py-1.5 text-xs font-semibold transition",
-                          taskListScope === "completed"
-                            ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
-                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                        )}
-                        onClick={() => setTaskListScope("completed")}
-                      >
-                        Виконані
-                      </button>
-                    </div>
-
-                    <div className="ml-auto flex items-center gap-2">
-                      <select
-                        className="soft-input min-w-[150px] px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-100"
-                        value={taskListSortMode}
-                        onChange={(event) => setTaskListSortMode(event.target.value as TaskListSortMode)}
-                        aria-label="Сортування списку задач"
-                      >
-                        <option value="default">Дефолтне</option>
-                        <option value="custom">Кастомне (drag)</option>
-                      </select>
-                    </div>
-                  </>
-                ) : (
+              {viewMode === "flow" ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/92">
                   <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     Потоки задач (Flow)
                   </div>
-                )}
-              </div>
+                </div>
+              ) : null}
 
-              {viewMode !== "flow" && sortedTasksForList.length === 0 ? (
+              {viewMode !== "flow" && taskSectionsForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
-                  Немає задач за поточним фільтром.
+                  Немає задач.
                 </div>
               ) : null}
               {viewMode === "flow" && flowChainsForList.length === 0 ? (
@@ -3189,6 +3211,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
                   setExpandedListTaskId(null);
                   setListQuickEditor(null);
+                  setListChecklistComposerOpenByTask({});
+                  setListDependencyEditorOpenByTask({});
                 }}
               >
                 {viewMode === "flow"
@@ -3263,13 +3287,35 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         </div>
                       </article>
                     ))
-                  : taskSectionsForList.map((section) => (
+                  : taskSectionsForList.map((section) => {
+                      const sectionCompletedVisible = showCompletedBySection[section.id];
+                      const visibleItems = sectionCompletedVisible
+                        ? section.completedItems
+                        : section.activeItems;
+                      const hasCompleted = section.completedItems.length > 0;
+                      return (
                       <section key={section.id} className="space-y-2">
-                        <div className="px-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                          {section.title}
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                            {section.title}
+                          </div>
+                          {hasCompleted ? (
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-sky-700 transition hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
+                              onClick={() => {
+                                setShowCompletedBySection((prev) => ({
+                                  ...prev,
+                                  [section.id]: !prev[section.id]
+                                }));
+                              }}
+                            >
+                              {sectionCompletedVisible ? "Сховати" : "Показати"}
+                            </button>
+                          ) : null}
                         </div>
                         <div className="space-y-2.5">
-                          {section.items.map(
+                          {visibleItems.map(
                             ({ task, block, computedStatus, dueTone, dependencyTask, dependencyBlock }) => {
                               if (!block) {
                                 return null;
@@ -3282,6 +3328,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               const isExpanded = expandedListTaskId === task.id;
                               const draftTitle = listTaskTitleDrafts[task.id] ?? task.title;
                               const checklistDraft = listChecklistDrafts[task.id] ?? "";
+                              const isChecklistComposerOpen = Boolean(
+                                listChecklistComposerOpenByTask[task.id]
+                              );
+                              const isDependencyEditorOpen = Boolean(
+                                listDependencyEditorOpenByTask[task.id]
+                              );
                               const isStatusEditorOpen =
                                 listQuickEditor?.taskId === task.id && listQuickEditor.type === "status";
                               const isDueDateEditorOpen =
@@ -3325,16 +3377,27 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                   taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
                                   draggingTaskIdInList === task.id ? "opacity-45" : "",
                                   dueTone === "overdue"
-                                    ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
+                                    ? canUseHoverInteractions
+                                      ? "border-rose-200 bg-rose-100 hover:bg-rose-200/70 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:bg-rose-900/80"
+                                      : "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
                                     : dueTone === "warning"
-                                      ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
-                                      : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/60 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
+                                      ? canUseHoverInteractions
+                                        ? "border-amber-200 bg-amber-100 hover:bg-amber-200/70 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:bg-amber-900/80"
+                                        : "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
+                                      : canUseHoverInteractions
+                                        ? "border-slate-200 bg-white hover:bg-slate-50/65 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:bg-slate-800/55"
+                                        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
                                 )}
                               >
                                   <div className="flex items-start gap-2.5">
                                     <button
                                       type="button"
-                                      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                      className={cn(
+                                        "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                                        canUseHoverInteractions
+                                          ? "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                          : ""
+                                      )}
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         void handleUpdateTask(task.id, {
@@ -3413,7 +3476,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           <button
                                             type="button"
                                             className={cn(
-                                              "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
+                                              "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100",
+                                              canUseHoverInteractions ? "hover:brightness-95" : "",
                                               taskStatusBadgeClasses[computedStatus]
                                             )}
                                             onClick={(event) => {
@@ -3437,7 +3501,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                     "mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition duration-100 last:mb-0",
                                                     option.value === task.status
                                                       ? "bg-sky-100 text-sky-800 dark:bg-sky-900/55 dark:text-sky-100"
-                                                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                      : canUseHoverInteractions
+                                                        ? "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                        : "text-slate-700 dark:text-slate-200"
                                                   )}
                                                   onClick={(event) => {
                                                     event.stopPropagation();
@@ -3455,7 +3521,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           <button
                                             type="button"
                                             className={cn(
-                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100 hover:brightness-95",
+                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
+                                              canUseHoverInteractions ? "hover:brightness-95" : "",
                                               dueTone === "overdue"
                                                 ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
                                                 : dueTone === "warning"
@@ -3515,8 +3582,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               className={cn(
                                                 "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
                                                 task.ownership === "mine"
-                                                  ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
-                                                  : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                                  ? canUseHoverInteractions
+                                                    ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
+                                                    : "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100"
+                                                  : canUseHoverInteractions
+                                                    ? "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                                    : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                                               )}
                                               onClick={(event) => {
                                                 event.stopPropagation();
@@ -3544,7 +3615,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                       "mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition duration-100 last:mb-0",
                                                       option.value === task.ownership
                                                         ? "bg-sky-100 text-sky-800 dark:bg-sky-900/55 dark:text-sky-100"
-                                                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                        : canUseHoverInteractions
+                                                          ? "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                          : "text-slate-700 dark:text-slate-200"
                                                     )}
                                                     onClick={(event) => {
                                                       event.stopPropagation();
@@ -3665,39 +3738,77 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         </div>
                                       ) : null}
                                       {isExpanded ? (
-                                        <div className="mt-2 ml-3 flex gap-2">
-                                          <input
-                                            className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
-                                            placeholder="Нова підзадача"
-                                            value={checklistDraft}
-                                            onClick={(event) => event.stopPropagation()}
-                                            onChange={(event) => {
-                                              setListChecklistDrafts((prev) => ({
-                                                ...prev,
-                                                [task.id]: event.target.value
-                                              }));
-                                            }}
-                                          />
+                                        isChecklistComposerOpen ? (
+                                          <div className="mt-2 ml-3 flex gap-2">
+                                            <input
+                                              className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
+                                              placeholder="Нова підзадача"
+                                              value={checklistDraft}
+                                              onClick={(event) => event.stopPropagation()}
+                                              onChange={(event) => {
+                                                setListChecklistDrafts((prev) => ({
+                                                  ...prev,
+                                                  [task.id]: event.target.value
+                                                }));
+                                              }}
+                                            />
+                                            <button
+                                              type="button"
+                                              className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                const text = checklistDraft.trim();
+                                                if (!text) {
+                                                  return;
+                                                }
+                                                const nextChecklist = [
+                                                  ...task.checklist,
+                                                  { id: crypto.randomUUID(), text, done: false }
+                                                ];
+                                                void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                                setListChecklistDrafts((prev) => ({ ...prev, [task.id]: "" }));
+                                                setListChecklistComposerOpenByTask((prev) => ({
+                                                  ...prev,
+                                                  [task.id]: false
+                                                }));
+                                              }}
+                                            >
+                                              <Plus size={12} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                setListChecklistComposerOpenByTask((prev) => ({
+                                                  ...prev,
+                                                  [task.id]: false
+                                                }));
+                                              }}
+                                              aria-label="Скасувати додавання підзадачі"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </div>
+                                        ) : (
                                           <button
                                             type="button"
-                                            className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold"
+                                            className={cn(
+                                              "mt-2 ml-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300",
+                                              canUseHoverInteractions ? "hover:text-sky-800 dark:hover:text-sky-200" : ""
+                                            )}
                                             onClick={(event) => {
                                               event.stopPropagation();
-                                              const text = checklistDraft.trim();
-                                              if (!text) {
-                                                return;
-                                              }
-                                              const nextChecklist = [
-                                                ...task.checklist,
-                                                { id: crypto.randomUUID(), text, done: false }
-                                              ];
-                                              void handleUpdateTask(task.id, { checklist: nextChecklist });
-                                              setListChecklistDrafts((prev) => ({ ...prev, [task.id]: "" }));
+                                              setListChecklistComposerOpenByTask((prev) => ({
+                                                ...prev,
+                                                [task.id]: true
+                                              }));
                                             }}
                                           >
                                             <Plus size={12} />
+                                            Додати підзадачу
                                           </button>
-                                        </div>
+                                        )
                                       ) : null}
                                       {computedStatus === "blocked" && dependencyTask ? (
                                         <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900">
@@ -3709,39 +3820,72 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                       ) : null}
                                       {isExpanded ? (
                                         <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
-                                          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
-                                            <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
-                                              Залежність задачі
+                                          {isDependencyEditorOpen ? (
+                                            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
+                                              <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                                                Залежність задачі
+                                              </div>
+                                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                                                <select
+                                                  className="soft-input px-2 py-1 text-xs"
+                                                  value={task.dependsOnTaskId ?? ""}
+                                                  onClick={(event) => event.stopPropagation()}
+                                                  onChange={(event) => {
+                                                    const nextTaskId = event.target.value || null;
+                                                    void handleUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
+                                                  }}
+                                                >
+                                                  <option value="">Без залежності</option>
+                                                  {taskDependencyOptions.map((option) => (
+                                                    <option key={option.id} value={option.id}>
+                                                      {option.label}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                                <button
+                                                  type="button"
+                                                  className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold text-slate-600 sm:text-xs dark:text-slate-200"
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    void handleUpdateTask(task.id, { dependsOnTaskId: null });
+                                                  }}
+                                                >
+                                                  Очистити
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setListDependencyEditorOpenByTask((prev) => ({
+                                                      ...prev,
+                                                      [task.id]: false
+                                                    }));
+                                                  }}
+                                                >
+                                                  <X size={12} />
+                                                </button>
+                                              </div>
                                             </div>
-                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                                              <select
-                                                className="soft-input px-2 py-1 text-xs"
-                                                value={task.dependsOnTaskId ?? ""}
-                                                onClick={(event) => event.stopPropagation()}
-                                                onChange={(event) => {
-                                                  const nextTaskId = event.target.value || null;
-                                                  void handleUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
-                                                }}
-                                              >
-                                                <option value="">Без залежності</option>
-                                                {taskDependencyOptions.map((option) => (
-                                                  <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                              <button
-                                                type="button"
-                                                className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
-                                                onClick={(event) => {
-                                                  event.stopPropagation();
-                                                  void handleUpdateTask(task.id, { dependsOnTaskId: null });
-                                                }}
-                                              >
-                                                Очистити
-                                              </button>
-                                            </div>
-                                          </div>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              className={cn(
+                                                "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300",
+                                                canUseHoverInteractions ? "hover:text-sky-800 dark:hover:text-sky-200" : ""
+                                              )}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                setListDependencyEditorOpenByTask((prev) => ({
+                                                  ...prev,
+                                                  [task.id]: true
+                                                }));
+                                              }}
+                                            >
+                                              <Plus size={12} />
+                                              {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
+                                            </button>
+                                          )}
 
                                           <PomodoroSection
                                             task={task}
@@ -3772,9 +3916,16 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               );
                             }
                           )}
+                          {visibleItems.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 px-3 py-3 text-xs text-muted-foreground dark:border-slate-700 dark:bg-slate-900/60">
+                              {sectionCompletedVisible
+                                ? "Немає виконаних задач."
+                                : "Немає активних задач."}
+                            </div>
+                          ) : null}
                         </div>
                       </section>
-                    ))}
+                    )})}
               </div>
             </div>
           </div>
@@ -3949,7 +4100,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       className={cn(
                         "inline-flex h-9 w-9 items-center justify-center rounded-lg border text-slate-600 transition duration-100",
                         isActive
-                          ? "border-sky-300 bg-sky-100 text-sky-700 shadow-sm"
+                          ? "border-sky-300 bg-sky-100 text-sky-700"
                           : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50"
                       )}
                       onClick={() => setNewBlockIconName(option.value)}
@@ -4113,7 +4264,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   <button
                     key={block.id}
                     type="button"
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50/60"
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-sky-300 hover:bg-sky-50/60"
                     onClick={() => {
                       openBlockDrawer(block.id);
                       setIsBlockListOpen(false);

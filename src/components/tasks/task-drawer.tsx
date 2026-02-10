@@ -209,8 +209,10 @@ export function TaskDrawer({
   className
 }: TaskDrawerProps): React.ReactElement {
   const [checklistDraft, setChecklistDraft] = useState<Record<string, string>>({});
+  const [checklistComposerOpenByTask, setChecklistComposerOpenByTask] = useState<Record<string, boolean>>({});
   const [editingChecklistByItem, setEditingChecklistByItem] = useState<Record<string, string>>({});
   const [editingTitleByTask, setEditingTitleByTask] = useState<Record<string, string>>({});
+  const [dependencyEditorOpenByTask, setDependencyEditorOpenByTask] = useState<Record<string, boolean>>({});
   const [creatingTask, setCreatingTask] = useState(false);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [newTaskTitleDraft, setNewTaskTitleDraft] = useState("");
@@ -303,6 +305,8 @@ export function TaskDrawer({
   useEffect(() => {
     setQuickEditor(null);
     setEditingChecklistByItem({});
+    setChecklistComposerOpenByTask({});
+    setDependencyEditorOpenByTask({});
     setIsCreateFormOpen(false);
     setNewTaskTitleDraft("");
   }, [block?.id]);
@@ -701,6 +705,8 @@ export function TaskDrawer({
             const globalIndex = sortedTasks.findIndex((entry) => entry.id === task.id);
             const draftTitle = editingTitleByTask[task.id] ?? task.title;
             const checklistInput = checklistDraft[task.id] ?? "";
+            const isChecklistComposerOpen = Boolean(checklistComposerOpenByTask[task.id]);
+            const isDependencyEditorOpen = Boolean(dependencyEditorOpenByTask[task.id]);
             const isExpanded = expandedTaskId === task.id;
             const showChecklistSection = task.checklist.length > 0 || isExpanded;
             const dueDateTone = getDueDateTone(task.dueDate, task.status);
@@ -1079,43 +1085,76 @@ export function TaskDrawer({
                           ))}
 
                           {isExpanded ? (
-                            <div className="flex gap-2 pt-1">
-                              <input
-                                className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
-                                placeholder="Нова підзадача"
-                                value={checklistInput}
-                                onChange={(event) => {
-                                  setChecklistDraft((prev) => ({
-                                    ...prev,
-                                    [task.id]: event.target.value
-                                  }));
-                                }}
-                              />
+                            isChecklistComposerOpen ? (
+                              <div className="flex gap-2 pt-1">
+                                <input
+                                  className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
+                                  placeholder="Нова підзадача"
+                                  value={checklistInput}
+                                  onChange={(event) => {
+                                    setChecklistDraft((prev) => ({
+                                      ...prev,
+                                      [task.id]: event.target.value
+                                    }));
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                                  onClick={async () => {
+                                    const text = checklistInput.trim();
+                                    if (!text) {
+                                      return;
+                                    }
+
+                                    const nextChecklist: ChecklistItem[] = [
+                                      ...task.checklist,
+                                      {
+                                        id: crypto.randomUUID(),
+                                        text,
+                                        done: false
+                                      }
+                                    ];
+
+                                    await onUpdateTask(task.id, { checklist: nextChecklist });
+                                    setChecklistDraft((prev) => ({ ...prev, [task.id]: "" }));
+                                    setChecklistComposerOpenByTask((prev) => ({
+                                      ...prev,
+                                      [task.id]: false
+                                    }));
+                                  }}
+                                >
+                                  <Plus size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                                  onClick={() => {
+                                    setChecklistComposerOpenByTask((prev) => ({
+                                      ...prev,
+                                      [task.id]: false
+                                    }));
+                                  }}
+                                  aria-label="Скасувати додавання підзадачі"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 type="button"
-                                className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold"
-                                onClick={async () => {
-                                  const text = checklistInput.trim();
-                                  if (!text) {
-                                    return;
-                                  }
-
-                                  const nextChecklist: ChecklistItem[] = [
-                                    ...task.checklist,
-                                    {
-                                      id: crypto.randomUUID(),
-                                      text,
-                                      done: false
-                                    }
-                                  ];
-
-                                  await onUpdateTask(task.id, { checklist: nextChecklist });
-                                  setChecklistDraft((prev) => ({ ...prev, [task.id]: "" }));
+                                className="inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300"
+                                onClick={() => {
+                                  setChecklistComposerOpenByTask((prev) => ({
+                                    ...prev,
+                                    [task.id]: true
+                                  }));
                                 }}
                               >
                                 <Plus size={12} />
+                                Додати підзадачу
                               </button>
-                            </div>
+                            )
                           ) : null}
                         </div>
                       </div>
@@ -1136,38 +1175,66 @@ export function TaskDrawer({
 
                   {isExpanded ? (
                     <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
-                    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
-                      <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
-                        Залежність задачі
-                      </div>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                        <select
-                          className="soft-input px-2 py-1 text-xs"
-                          value={task.dependsOnTaskId ?? ""}
-                          onChange={async (event) => {
-                            const nextTaskId = event.target.value || null;
-                            await onUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
-                          }}
-                        >
-                          <option value="">Без залежності</option>
-                          {taskDependencyOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                    {isDependencyEditorOpen ? (
+                      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
+                        <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                          Залежність задачі
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+                          <select
+                            className="soft-input px-2 py-1 text-xs"
+                            value={task.dependsOnTaskId ?? ""}
+                            onChange={async (event) => {
+                              const nextTaskId = event.target.value || null;
+                              await onUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
+                            }}
+                          >
+                            <option value="">Без залежності</option>
+                            {taskDependencyOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
 
-                        <button
-                          type="button"
-                          className="soft-button inline-flex items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
-                          onClick={async () => {
-                            await onUpdateTask(task.id, { dependsOnTaskId: null });
-                          }}
-                        >
-                          Очистити
-                        </button>
+                          <button
+                            type="button"
+                            className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold text-slate-600 sm:text-xs dark:text-slate-200"
+                            onClick={async () => {
+                              await onUpdateTask(task.id, { dependsOnTaskId: null });
+                            }}
+                          >
+                            Очистити
+                          </button>
+                          <button
+                            type="button"
+                            className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold sm:text-xs"
+                            onClick={() => {
+                              setDependencyEditorOpenByTask((prev) => ({
+                                ...prev,
+                                [task.id]: false
+                              }));
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300"
+                        onClick={() => {
+                          setDependencyEditorOpenByTask((prev) => ({
+                            ...prev,
+                            [task.id]: true
+                          }));
+                        }}
+                      >
+                        <Plus size={12} />
+                        {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
+                      </button>
+                    )}
 
                     <PomodoroSection
                       task={task}
