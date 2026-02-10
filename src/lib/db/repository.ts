@@ -38,7 +38,6 @@ interface TaskRow {
   priority: TaskItem["priority"];
   depends_on_task_id: string | null;
   due_date: Date | string | null;
-  recurrence: TaskItem["recurrence"];
   checklist_json: unknown;
   ord: number;
   created_at: Date | string;
@@ -127,7 +126,6 @@ const mapTask = (row: TaskRow): TaskItem => ({
   priority: row.priority,
   dependsOnTaskId: row.depends_on_task_id,
   dueDate: toDateString(row.due_date),
-  recurrence: row.recurrence,
   checklist: parseChecklist(row.checklist_json),
   order: Number(row.ord),
   createdAt: toIso(row.created_at),
@@ -262,7 +260,7 @@ export const listTasks = async (blockId?: string): Promise<TaskItem[]> => {
 
   if (blockId) {
     const rows = await sql<TaskRow[]>`
-      select id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, created_at, updated_at, completed_at
+      select id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, checklist_json, ord, created_at, updated_at, completed_at
       from tasks
       where block_id = ${blockId}
         and exists (
@@ -278,7 +276,7 @@ export const listTasks = async (blockId?: string): Promise<TaskItem[]> => {
   }
 
   const rows = await sql<TaskRow[]>`
-    select id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, created_at, updated_at, completed_at
+    select id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, checklist_json, ord, created_at, updated_at, completed_at
     from tasks
     where exists (
       select 1
@@ -297,7 +295,7 @@ export const createTask = async (
 ): Promise<TaskItem> => {
   const sql = getSql();
   const rows = await sql<TaskRow[]>`
-    insert into tasks (block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, completed_at)
+    insert into tasks (block_id, title, status, ownership, priority, depends_on_task_id, due_date, checklist_json, ord, completed_at)
     values (
       ${payload.blockId},
       ${payload.title},
@@ -306,52 +304,14 @@ export const createTask = async (
       ${payload.priority ?? "medium"},
       ${payload.dependsOnTaskId ?? null},
       ${payload.dueDate ?? null},
-      ${payload.recurrence ?? "none"},
       ${JSON.stringify(payload.checklist ?? [])}::jsonb,
       ${payload.order ?? 0},
       ${payload.status === "done" ? new Date() : null}
     )
-    returning id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, created_at, updated_at, completed_at
+    returning id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, checklist_json, ord, created_at, updated_at, completed_at
   `;
 
   return mapTask(rows[0]);
-};
-
-export const createTasksBatch = async (
-  payload: Omit<TaskItem, "id">[]
-): Promise<TaskItem[]> => {
-  if (payload.length === 0) {
-    return [];
-  }
-
-  const sql = getSql();
-  const inserted: TaskRow[] = [];
-
-  for (const item of payload) {
-    const rows = await sql<TaskRow[]>`
-      insert into tasks (block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, completed_at, created_at, updated_at)
-      values (
-        ${item.blockId},
-        ${item.title},
-        ${item.status},
-        ${item.ownership},
-        ${item.priority},
-        ${item.dependsOnTaskId ?? null},
-        ${item.dueDate ?? null},
-        ${item.recurrence},
-        ${JSON.stringify(item.checklist)}::jsonb,
-        ${item.order},
-        ${item.completedAt ? new Date(item.completedAt) : null},
-        ${new Date(item.createdAt)},
-        ${new Date(item.updatedAt)}
-      )
-      returning id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, created_at, updated_at, completed_at
-    `;
-
-    inserted.push(rows[0]);
-  }
-
-  return inserted.map(mapTask);
 };
 
 export const updateTask = async (
@@ -367,7 +327,6 @@ export const updateTask = async (
   if (payload.priority !== undefined) updates.priority = payload.priority;
   if (payload.dependsOnTaskId !== undefined) updates.depends_on_task_id = payload.dependsOnTaskId;
   if (payload.dueDate !== undefined) updates.due_date = payload.dueDate;
-  if (payload.recurrence !== undefined) updates.recurrence = payload.recurrence;
   if (payload.checklist !== undefined) updates.checklist_json = payload.checklist;
   if (payload.order !== undefined) updates.ord = payload.order;
 
@@ -383,7 +342,7 @@ export const updateTask = async (
     update tasks
     set ${sql(updates)}
     where id = ${taskId}
-    returning id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, recurrence, checklist_json, ord, created_at, updated_at, completed_at
+    returning id, block_id, title, status, ownership, priority, depends_on_task_id, due_date, checklist_json, ord, created_at, updated_at, completed_at
   `;
 
   if (rows.length === 0) {

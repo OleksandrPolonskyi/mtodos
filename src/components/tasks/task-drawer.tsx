@@ -11,16 +11,13 @@ import {
   ChevronDown,
   Circle,
   ClipboardList,
-  Link2,
   Plus,
-  Repeat,
   Trash2,
   X
 } from "lucide-react";
 import type {
   BusinessBlock,
   ChecklistItem,
-  Recurrence,
   TaskItem,
   TaskStatus
 } from "@/types/domain";
@@ -34,7 +31,6 @@ import { cn } from "@/lib/utils";
 interface NewTaskInput {
   title: string;
   dueDate: string | null;
-  recurrence: Recurrence;
 }
 
 interface TaskDrawerProps {
@@ -42,6 +38,7 @@ interface TaskDrawerProps {
   blocks: BusinessBlock[];
   tasks: TaskItem[];
   allTasks: TaskItem[];
+  taskFlowStepById: ReadonlyMap<string, number>;
   autoStartCreateToken?: number;
   autoStartCreateBlockId?: string | null;
   dependencyBlockedTaskIds: ReadonlySet<string>;
@@ -63,13 +60,6 @@ const statusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "done", label: "Готово" }
 ];
 
-const recurrenceOptions: Array<{ value: Recurrence; label: string }> = [
-  { value: "none", label: "Без повтору" },
-  { value: "daily", label: "Щодня" },
-  { value: "weekly", label: "Щотижня" },
-  { value: "monthly", label: "Щомісяця" }
-];
-
 const statusBadgeClasses: Record<TaskStatus, string> = {
   todo:
     "border border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-500/50 dark:bg-sky-900/45 dark:text-sky-100",
@@ -88,11 +78,11 @@ const statusLabelMap: Record<TaskStatus, string> = {
   done: "Готово"
 };
 
-const recurrenceLabelMap: Record<Recurrence, string> = {
-  none: "Без повтору",
-  daily: "Щодня",
-  weekly: "Щотижня",
-  monthly: "Щомісяця"
+const taskStatusOrder: Record<TaskStatus, number> = {
+  in_progress: 0,
+  todo: 1,
+  blocked: 2,
+  done: 3
 };
 
 const ownershipLabelMap: Record<TaskItem["ownership"], string> = {
@@ -145,6 +135,19 @@ const getQuickDueDateValue = (preset: "today" | "tomorrow" | "weekend"): string 
   return toLocalDateString(weekend);
 };
 
+const toDateTimestamp = (date: string | null): number => {
+  if (!date) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const parsed = Date.parse(`${date}T00:00:00`);
+  if (Number.isNaN(parsed)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return parsed;
+};
+
 const quickDueDateOptions = [
   { value: "today", label: "Сьогодні" },
   { value: "tomorrow", label: "Завтра" },
@@ -190,6 +193,7 @@ export function TaskDrawer({
   blocks,
   tasks,
   allTasks,
+  taskFlowStepById,
   autoStartCreateToken = 0,
   autoStartCreateBlockId = null,
   dependencyBlockedTaskIds,
@@ -213,7 +217,7 @@ export function TaskDrawer({
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [quickEditor, setQuickEditor] = useState<{
     taskId: string;
-    type: "status" | "dueDate";
+    type: "status" | "dueDate" | "ownership";
   } | null>(null);
   const [blockTitleDraft, setBlockTitleDraft] = useState("");
   const [savingBlockTitle, setSavingBlockTitle] = useState(false);
@@ -224,8 +228,23 @@ export function TaskDrawer({
   const previousAutoStartTokenRef = useRef<number>(-1);
 
   const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a, b) => a.order - b.order || a.updatedAt.localeCompare(b.updatedAt));
-  }, [tasks]);
+    return [...tasks].sort((a, b) => {
+      const aComputedStatus: TaskStatus = dependencyBlockedTaskIds.has(a.id) ? "blocked" : a.status;
+      const bComputedStatus: TaskStatus = dependencyBlockedTaskIds.has(b.id) ? "blocked" : b.status;
+
+      const statusDiff = taskStatusOrder[aComputedStatus] - taskStatusOrder[bComputedStatus];
+      if (statusDiff !== 0) {
+        return statusDiff;
+      }
+
+      const dueDiff = toDateTimestamp(a.dueDate) - toDateTimestamp(b.dueDate);
+      if (dueDiff !== 0) {
+        return dueDiff;
+      }
+
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+  }, [dependencyBlockedTaskIds, tasks]);
 
   const ownTasks = useMemo(() => {
     return sortedTasks.filter((task) => task.ownership === "mine");
@@ -242,6 +261,15 @@ export function TaskDrawer({
 
   const blocksById = useMemo(() => new Map(blocks.map((item) => [item.id, item])), [blocks]);
   const allTasksById = useMemo(() => new Map(allTasks.map((item) => [item.id, item])), [allTasks]);
+  const dependencySourceTaskIds = useMemo(
+    () =>
+      new Set(
+        allTasks
+          .filter((item) => Boolean(item.dependsOnTaskId))
+          .map((item) => item.dependsOnTaskId as string)
+      ),
+    [allTasks]
+  );
   const dependencyTaskOptions = useMemo(() => {
     return [...allTasks]
       .map((item) => {
@@ -370,8 +398,7 @@ export function TaskDrawer({
     try {
       const createdTask = await onCreateTask({
         title: title.trim() || "Нова задача",
-        dueDate: null,
-        recurrence: "none"
+        dueDate: null
       });
       if (createdTask && options?.focusCreatedTask) {
         setExpandedTaskId(createdTask.id);
@@ -401,9 +428,9 @@ export function TaskDrawer({
       return;
     }
 
-    setIsCreateFormOpen(false);
+    setExpandedTaskId(null);
     setNewTaskTitleDraft("");
-    void handleCreate("Нова задача", { closeForm: true, focusCreatedTask: true });
+    setIsCreateFormOpen(true);
   }, [autoStartCreateBlockId, autoStartCreateToken, block]);
 
   const handleBlockRename = async (): Promise<void> => {
@@ -493,7 +520,7 @@ export function TaskDrawer({
       }}
     >
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <div ref={iconPickerRef} className="relative mb-1 w-fit">
             <button
               type="button"
@@ -506,7 +533,7 @@ export function TaskDrawer({
             </button>
             {isIconPickerOpen ? (
               <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <div className="mb-1 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   Іконка блоку
                 </div>
                 <div className="grid grid-cols-6 gap-1.5">
@@ -541,7 +568,7 @@ export function TaskDrawer({
           </div>
           <input
             className={cn(
-              "font-display w-full max-w-[320px] rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg font-semibold tracking-tight text-slate-900 outline-none transition",
+              "font-display w-full max-w-[280px] rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg font-semibold tracking-tight text-slate-900 outline-none transition sm:max-w-[320px]",
               "focus:border-slate-300 focus:bg-white/85",
               savingBlockTitle ? "opacity-70" : ""
             )}
@@ -563,34 +590,36 @@ export function TaskDrawer({
             }}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             disabled={creatingTask}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 transition duration-100 hover:bg-sky-100 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900",
+              "inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold leading-none text-sky-800 transition duration-100 hover:bg-sky-100 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900",
               "disabled:cursor-not-allowed disabled:opacity-60"
             )}
             onClick={() => setIsCreateFormOpen(true)}
           >
-            <Plus size={12} />
+            <Plus size={14} />
             Нова задача
           </button>
           <button
             type="button"
-            className="soft-button inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-600"
+            className="soft-button inline-flex h-9 w-9 items-center justify-center text-slate-600"
             onClick={onClose}
+            aria-label="Закрити"
+            title="Закрити"
           >
-            <X size={12} />
-            Закрити
+            <X size={14} />
           </button>
           <button
             type="button"
-            className="soft-button inline-flex items-center gap-1 border-destructive px-2.5 py-1 text-xs font-semibold text-destructive"
+            className="soft-button inline-flex h-9 w-9 items-center justify-center border-destructive text-destructive"
             onClick={() => onArchiveBlock(block.id)}
+            aria-label="Архівувати"
+            title="Архівувати"
           >
-            <Archive size={12} />
-            Архівувати
+            <Archive size={14} />
           </button>
         </div>
       </div>
@@ -600,7 +629,7 @@ export function TaskDrawer({
           <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Список задач
           </div>
-          <div className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
+          <div className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
             {ownTasks.length}
           </div>
         </div>
@@ -678,16 +707,18 @@ export function TaskDrawer({
               quickEditor?.taskId === task.id && quickEditor.type === "status";
             const isDueDateEditorOpen =
               quickEditor?.taskId === task.id && quickEditor.type === "dueDate";
+            const isOwnershipEditorOpen =
+              quickEditor?.taskId === task.id && quickEditor.type === "ownership";
             const dependencyTask = task.dependsOnTaskId
               ? allTasksById.get(task.dependsOnTaskId) ?? null
-              : null;
-            const dependencyBlock = dependencyTask
-              ? blocksById.get(dependencyTask.blockId) ?? null
               : null;
             const taskDependencyOptions = dependencyTaskOptions.filter(
               (candidate) => candidate.id !== task.id
             );
             const isBlockedByDependency = dependencyBlockedTaskIds.has(task.id);
+            const isDependentTask = Boolean(task.dependsOnTaskId);
+            const isDependencySourceTask = dependencySourceTaskIds.has(task.id);
+            const flowStep = taskFlowStepById.get(task.id) ?? null;
 
             return (
               <div key={task.id}>
@@ -700,7 +731,12 @@ export function TaskDrawer({
                   data-task-item="true"
                   data-task-id={task.id}
                   className={cn(
-                    "rounded-xl border border-slate-200 bg-white p-3 transition-colors duration-100 dark:border-slate-700 dark:bg-slate-900/92"
+                    "relative overflow-visible rounded-xl border bg-white p-3 transition-colors duration-100 dark:bg-slate-900/92",
+                    isDependentTask
+                      ? "border-violet-300 dark:border-violet-500/70"
+                      : isDependencySourceTask
+                        ? "border-violet-200 dark:border-violet-500/45"
+                        : "border-slate-200 dark:border-slate-700"
                   )}
                 >
                   <div className="flex items-start gap-2">
@@ -717,36 +753,71 @@ export function TaskDrawer({
                   </button>
 
                   <div className="min-w-0 flex-1">
-                    <input
-                      data-task-title-input="true"
-                      className={cn(
-                        "w-full rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
-                        task.status === "done"
-                          ? "text-slate-500 line-through"
-                          : taskTitleToneClasses[dueDateTone]
+                    <div className="flex items-start gap-2">
+                      {isExpanded ? (
+                        <textarea
+                          data-task-title-input="true"
+                          className={cn(
+                            "w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-md border border-transparent bg-transparent px-1 py-1 text-base font-semibold leading-tight outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
+                            task.status === "done"
+                              ? "text-slate-500 line-through"
+                              : taskTitleToneClasses[dueDateTone]
+                          )}
+                          rows={1}
+                          value={draftTitle}
+                          ref={(element) => {
+                            if (!element) {
+                              return;
+                            }
+                            element.style.height = "0px";
+                            element.style.height = `${element.scrollHeight}px`;
+                          }}
+                          onInput={(event) => {
+                            const element = event.currentTarget;
+                            element.style.height = "0px";
+                            element.style.height = `${element.scrollHeight}px`;
+                          }}
+                          onChange={(event) => {
+                            setEditingTitleByTask((prev) => ({
+                              ...prev,
+                              [task.id]: event.target.value
+                            }));
+                          }}
+                          onFocus={() => setExpandedTaskId(task.id)}
+                          onBlur={async () => {
+                            const nextTitle = draftTitle.trim();
+                            if (nextTitle && nextTitle !== task.title) {
+                              await onUpdateTask(task.id, { title: nextTitle });
+                            }
+                          }}
+                        ></textarea>
+                      ) : (
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full rounded-md px-1 py-1 text-left text-base font-semibold leading-tight",
+                            task.status === "done"
+                              ? "text-slate-500 line-through"
+                              : taskTitleToneClasses[dueDateTone]
+                          )}
+                          onClick={() => setExpandedTaskId(task.id)}
+                        >
+                          {task.title}
+                        </button>
                       )}
-                      value={draftTitle}
-                      onChange={(event) => {
-                        setEditingTitleByTask((prev) => ({
-                          ...prev,
-                          [task.id]: event.target.value
-                        }));
-                      }}
-                      onFocus={() => setExpandedTaskId(task.id)}
-                      onBlur={async () => {
-                        const nextTitle = draftTitle.trim();
-                        if (nextTitle && nextTitle !== task.title) {
-                          await onUpdateTask(task.id, { title: nextTitle });
-                        }
-                      }}
-                    />
+                      {flowStep ? (
+                        <span className="mt-1 inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 px-1 text-[10px] font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/55 dark:text-violet-100">
+                          {flowStep}
+                        </span>
+                      ) : null}
+                    </div>
 
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <div className="relative" data-quick-editor="true">
                         <button
                           type="button"
                           className={cn(
-                            "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
+                            "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
                             statusBadgeClasses[task.status]
                           )}
                           onClick={(event) => {
@@ -788,7 +859,7 @@ export function TaskDrawer({
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100 hover:brightness-95",
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100 hover:brightness-95",
                             dueDateTagClasses[dueDateTone]
                           )}
                           onClick={(event) => {
@@ -800,17 +871,17 @@ export function TaskDrawer({
                             );
                           }}
                         >
-                          <CalendarClock size={10} />
+                          <CalendarClock size={12} />
                           {formatDueDate(task.dueDate)}
                         </button>
                         {isDueDateEditorOpen ? (
                           <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                            <div className="mb-2 grid grid-cols-3 gap-1">
+                            <div className="mb-2 flex flex-wrap gap-1">
                               {quickDueDateOptions.map((option) => (
                                 <button
                                   key={option.value}
                                   type="button"
-                                  className="soft-button px-2 py-1 text-[10px] font-semibold"
+                                  className="soft-button whitespace-nowrap px-2.5 py-1.5 text-xs font-semibold"
                                   onClick={async (event) => {
                                     event.stopPropagation();
                                     await onUpdateTask(task.id, {
@@ -823,17 +894,6 @@ export function TaskDrawer({
                                 </button>
                               ))}
                             </div>
-                            <input
-                              type="date"
-                              className="soft-input mb-2 w-full px-2 py-1 text-xs"
-                              value={task.dueDate ?? ""}
-                              onChange={async (event) => {
-                                await onUpdateTask(task.id, {
-                                  dueDate: event.target.value || null
-                                });
-                                setQuickEditor(null);
-                              }}
-                            />
                             <button
                               type="button"
                               className="soft-button inline-flex w-full items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
@@ -848,42 +908,64 @@ export function TaskDrawer({
                         ) : null}
                       </div>
 
-                      {task.recurrence !== "none" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100 px-2 py-1 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
-                          <Repeat size={10} />
-                          {recurrenceLabelMap[task.recurrence]}
-                        </span>
+                      {isExpanded ? (
+                        <div className="relative" data-quick-editor="true">
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
+                              task.ownership === "mine"
+                                ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
+                                : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                            )}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setQuickEditor((current) =>
+                                current?.taskId === task.id && current.type === "ownership"
+                                  ? null
+                                  : { taskId: task.id, type: "ownership" }
+                              );
+                            }}
+                          >
+                            {ownershipLabelMap[task.ownership]}
+                          </button>
+                          {isOwnershipEditorOpen ? (
+                            <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                              {(
+                                [
+                                  { value: "mine", label: "Моє" },
+                                  { value: "delegated", label: "Делеговано" }
+                                ] as const
+                              ).map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={cn(
+                                    "mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition duration-100 last:mb-0",
+                                    option.value === task.ownership
+                                      ? "bg-sky-100 text-sky-800 dark:bg-sky-900/55 dark:text-sky-100"
+                                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                  )}
+                                  onClick={async (event) => {
+                                    event.stopPropagation();
+                                    if (option.value !== task.ownership) {
+                                      await onUpdateTask(task.id, { ownership: option.value });
+                                    }
+                                    setQuickEditor(null);
+                                  }}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
 
-                      <button
-                        type="button"
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100",
-                          task.ownership === "mine"
-                            ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
-                            : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                        )}
-                        onClick={async () => {
-                          await onUpdateTask(task.id, {
-                            ownership: task.ownership === "mine" ? "delegated" : "mine"
-                          });
-                        }}
-                      >
-                        {ownershipLabelMap[task.ownership]}
-                      </button>
-
-                      {dependencyTask ? (
-                        <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/35 dark:text-violet-100">
-                          <Link2 size={10} />
-                          <span className="truncate">
-                            {dependencyBlock?.title ?? "Блок"} / {dependencyTask.title}
-                          </span>
-                        </span>
-                      ) : null}
                     </div>
 
                     {isBlockedByDependency && dependencyTask ? (
-                      <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] font-semibold text-amber-900 dark:border-amber-500/50 dark:bg-amber-900/50 dark:text-amber-100">
+                      <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900 dark:border-amber-500/50 dark:bg-amber-900/50 dark:text-amber-100">
                         <AlertTriangle size={12} />
                         <span className="truncate">
                           Блокує прострочена задача: {dependencyTask.title}
@@ -918,7 +1000,7 @@ export function TaskDrawer({
                                 <>
                                   <input
                                     className={cn(
-                                      "soft-input min-w-0 flex-1 px-2 py-1 text-sm",
+                                      "soft-input min-w-0 flex-1 px-2.5 py-2 text-base sm:text-sm",
                                       item.done ? "line-through text-slate-500" : ""
                                     )}
                                     value={editingChecklistByItem[`${task.id}:${item.id}`] ?? item.text}
@@ -998,7 +1080,7 @@ export function TaskDrawer({
                           {isExpanded ? (
                             <div className="flex gap-2 pt-1">
                               <input
-                                className="soft-input w-full px-2 py-1 text-xs"
+                                className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
                                 placeholder="Нова підзадача"
                                 value={checklistInput}
                                 onChange={(event) => {
@@ -1053,51 +1135,8 @@ export function TaskDrawer({
 
                   {isExpanded ? (
                     <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
-                    <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <select
-                        className="soft-input px-2 py-1 text-xs"
-                        value={task.status}
-                        onChange={async (event) => {
-                          await onUpdateTask(task.id, {
-                            status: event.target.value as TaskStatus
-                          });
-                        }}
-                      >
-                        {statusOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="date"
-                        className="soft-input px-2 py-1 text-xs"
-                        value={task.dueDate ?? ""}
-                        onChange={async (event) => {
-                          await onUpdateTask(task.id, {
-                            dueDate: event.target.value || null
-                          });
-                        }}
-                      />
-                      <select
-                        className="soft-input px-2 py-1 text-xs"
-                        value={task.recurrence}
-                        onChange={async (event) => {
-                          await onUpdateTask(task.id, {
-                            recurrence: event.target.value as Recurrence
-                          });
-                        }}
-                      >
-                        {recurrenceOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
                     <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                      <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
                         Залежність задачі
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">

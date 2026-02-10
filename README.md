@@ -15,7 +15,7 @@ Web + PWA застосунок для візуального керування 
 - CRUD блоків та soft archive
 - Стрілки-залежності між блоками
 - Сайдбар задач для вибраного блоку
-- CRUD задач, пріоритети, дедлайни, чекліст, повтори
+- CRUD задач, пріоритети, дедлайни, чекліст
 - Debounced автозбереження позицій (500мс)
 - In-app reminders (`overdue` + `due within 24h`)
 - Dashboard `/[workspace]/dashboard`
@@ -70,15 +70,9 @@ http://localhost:3000/<APP_SECRET_PATH>
 - `DELETE /api/tasks/:id`
 - `POST /api/tasks/reorder`
 - `GET /api/dashboard/weekly`
-- `GET|POST /api/jobs/recurrence`
 - `POST /api/bootstrap`
 
 Усі API-запити очікують заголовок `x-app-secret`.
-
-## Cron recurrence
-
-- `vercel.json` додає щоденний cron на `/api/jobs/recurrence` (Hobby-сумісно).
-- Для продакшну задай `CRON_SECRET` або `JOBS_SECRET`.
 
 ## Безпека в межах MVP
 

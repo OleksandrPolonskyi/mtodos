@@ -16,7 +16,6 @@ export const blockIconSchema = z.enum(blockIconNames);
 
 export const taskStatusSchema = z.enum(["todo", "in_progress", "done", "blocked"]);
 export const taskPrioritySchema = z.enum(["low", "medium", "high"]);
-export const recurrenceSchema = z.enum(["none", "daily", "weekly", "monthly"]);
 export const taskOwnershipSchema = z.enum(["mine", "delegated"]);
 
 export const checklistItemSchema = z.object({
@@ -66,7 +65,6 @@ export const createTaskSchema = z.object({
   priority: taskPrioritySchema.optional(),
   dependsOnTaskId: z.string().uuid().nullable().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  recurrence: recurrenceSchema.optional(),
   checklist: z.array(checklistItemSchema).optional(),
   order: z.number().optional()
 });
@@ -78,7 +76,6 @@ export const updateTaskSchema = z.object({
   priority: taskPrioritySchema.optional(),
   dependsOnTaskId: z.string().uuid().nullable().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  recurrence: recurrenceSchema.optional(),
   checklist: z.array(checklistItemSchema).optional(),
   order: z.number().optional(),
   completedAt: z.string().datetime().nullable().optional()

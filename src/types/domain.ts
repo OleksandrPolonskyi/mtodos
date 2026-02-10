@@ -28,7 +28,6 @@ export type BlockIconName = (typeof blockIconNames)[number];
 
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
 export type TaskPriority = "low" | "medium" | "high";
-export type Recurrence = "none" | "daily" | "weekly" | "monthly";
 export type TaskOwnership = "mine" | "delegated";
 
 export interface BusinessBlock {
@@ -67,7 +66,6 @@ export interface TaskItem {
   priority: TaskPriority;
   dependsOnTaskId: string | null;
   dueDate: string | null;
-  recurrence: Recurrence;
   checklist: ChecklistItem[];
   order: number;
   createdAt: string;

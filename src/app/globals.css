@@ -153,11 +153,37 @@ html.theme-dark .surface-panel {
   transition: border-color 110ms ease, box-shadow 110ms ease, background 110ms ease;
 }
 
+select.soft-input {
+  --select-arrow-offset: 10px;
+  --select-arrow-color: rgba(71, 85, 105, 0.9);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 2.1rem !important;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--select-arrow-color) 50%),
+    linear-gradient(135deg, var(--select-arrow-color) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position:
+    calc(100% - calc(var(--select-arrow-offset) + 6px)) 50%,
+    calc(100% - var(--select-arrow-offset)) 50%;
+  background-size: 6px 6px, 6px 6px;
+}
+
+select.soft-input::-ms-expand {
+  display: none;
+}
+
 html.theme-dark .soft-input {
   border-color: rgba(71, 85, 105, 0.6);
   background: rgba(15, 23, 42, 0.88);
   color: #dbe7ff;
 }
+
+html.theme-dark select.soft-input {
+  --select-arrow-color: rgba(191, 219, 254, 0.92);
+}
+
 
 .soft-input:focus {
   outline: none;

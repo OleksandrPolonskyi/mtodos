@@ -1,5 +1,4 @@
-import { addDays, addMonths, addWeeks, parseISO } from "date-fns";
-import type { Recurrence } from "@/types/domain";
+import { addDays, parseISO } from "date-fns";
 
 export const formatDateInTimeZone = (
   date: Date,
@@ -54,24 +53,6 @@ export const isDueWithin24Hours = (
   const tomorrow = formatDateInTimeZone(addDays(new Date(), 1), timeZone);
 
   return dateValue === today || dateValue === tomorrow;
-};
-
-export const addRecurrenceInterval = (
-  dateValue: string,
-  recurrence: Recurrence
-): string => {
-  const date = parseISO(`${dateValue}T00:00:00.000Z`);
-
-  switch (recurrence) {
-    case "daily":
-      return formatDateInTimeZone(addDays(date, 1), "UTC");
-    case "weekly":
-      return formatDateInTimeZone(addWeeks(date, 1), "UTC");
-    case "monthly":
-      return formatDateInTimeZone(addMonths(date, 1), "UTC");
-    default:
-      return dateValue;
-  }
 };
 
 export const startAndEndOfWeek = (

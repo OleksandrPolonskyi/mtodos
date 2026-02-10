@@ -21,7 +21,6 @@ import {
   Moon,
   Plus,
   RefreshCcw,
-  Repeat,
   Sparkles,
   Sun,
   Trash2,
@@ -38,7 +37,6 @@ import type {
   BlockEdge,
   BlockType,
   BusinessBlock,
-  Recurrence,
   TaskItem,
   TaskStatus
 } from "@/types/domain";
@@ -62,9 +60,9 @@ interface WorkspaceCanvasProps {
   workspace: string;
 }
 
-type WorkspaceViewMode = "canvas" | "list";
-type TaskListSortMode = "due_date" | "status" | "custom";
-type TaskListScope = "active" | "completed" | "flow";
+type WorkspaceViewMode = "canvas" | "list" | "flow";
+type TaskListSortMode = "default" | "custom";
+type TaskListScope = "active" | "completed";
 type AnchorSide = "left" | "right" | "top" | "bottom";
 
 interface LinkDraftState {
@@ -132,20 +130,6 @@ const taskStatusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "blocked", label: "Заблоковано" },
   { value: "done", label: "Готово" }
 ];
-
-const recurrenceOptions: Array<{ value: Recurrence; label: string }> = [
-  { value: "none", label: "Без повтору" },
-  { value: "daily", label: "Щодня" },
-  { value: "weekly", label: "Щотижня" },
-  { value: "monthly", label: "Щомісяця" }
-];
-
-const recurrenceLabelMap: Record<Recurrence, string> = {
-  none: "Без повтору",
-  daily: "Щодня",
-  weekly: "Щотижня",
-  monthly: "Щомісяця"
-};
 
 const taskStatusBadgeClasses: Record<TaskStatus, string> = {
   todo:
@@ -295,14 +279,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>("list");
-  const [taskListSortMode, setTaskListSortMode] = useState<TaskListSortMode>("due_date");
+  const [taskListSortMode, setTaskListSortMode] = useState<TaskListSortMode>("default");
   const [taskListScope, setTaskListScope] = useState<TaskListScope>("active");
   const [taskListManualOrder, setTaskListManualOrder] = useState<string[]>([]);
   const [draggingTaskIdInList, setDraggingTaskIdInList] = useState<string | null>(null);
   const [expandedListTaskId, setExpandedListTaskId] = useState<string | null>(null);
   const [listQuickEditor, setListQuickEditor] = useState<{
     taskId: string;
-    type: "status" | "dueDate";
+    type: "status" | "dueDate" | "ownership";
   } | null>(null);
   const [listTaskTitleDrafts, setListTaskTitleDrafts] = useState<Record<string, string>>({});
   const [listChecklistDrafts, setListChecklistDrafts] = useState<Record<string, string>>({});
@@ -372,12 +356,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       try {
         await apiPost<{ bootstrapped: boolean }>("/api/bootstrap");
-
-        try {
-          await apiPost<{ created: number }>("/api/jobs/recurrence");
-        } catch {
-          // recurrence fallback on open is best-effort
-        }
 
         await reloadData();
       } catch (loadError) {
@@ -1129,6 +1107,27 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       .sort((left, right) => right.steps.length - left.steps.length);
   }, [blocksById, dependencyBlockedTaskIds, flowInsights.chains, tasks]);
 
+  const taskFlowStepById = useMemo(() => {
+    const stepMap = new Map<string, number>();
+
+    for (const chain of flowInsights.chains) {
+      if (chain.length < 2) {
+        continue;
+      }
+
+      for (let index = 0; index < chain.length; index += 1) {
+        const taskId = chain[index];
+        const step = index + 1;
+        const current = stepMap.get(taskId);
+        if (!current || step < current) {
+          stepMap.set(taskId, step);
+        }
+      }
+    }
+
+    return stepMap;
+  }, [flowInsights.chains]);
+
   const dependencyTaskOptionsForList = useMemo(() => {
     return [...tasks]
       .map((item) => {
@@ -1149,6 +1148,16 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         return a.order - b.order || a.updatedAt.localeCompare(b.updatedAt);
       });
   }, [blocksById, tasks]);
+
+  const dependencySourceTaskIds = useMemo(
+    () =>
+      new Set(
+        tasks
+          .filter((item) => Boolean(item.dependsOnTaskId))
+          .map((item) => item.dependsOnTaskId as string)
+      ),
+    [tasks]
+  );
 
   const sortedTasksForList = useMemo(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
@@ -1181,10 +1190,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           return false;
         }
 
-        if (taskListScope === "flow") {
-          return false;
-        }
-
         if (taskListScope === "active") {
           return item.computedStatus !== "done";
         }
@@ -1203,28 +1208,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         return b.task.updatedAt.localeCompare(a.task.updatedAt);
       }
 
-      if (taskListSortMode === "status") {
-        const statusDiff = taskStatusOrder[a.computedStatus] - taskStatusOrder[b.computedStatus];
-        if (statusDiff !== 0) {
-          return statusDiff;
-        }
-
-        const dueDiff = toDateTimestamp(a.task.dueDate) - toDateTimestamp(b.task.dueDate);
-        if (dueDiff !== 0) {
-          return dueDiff;
-        }
-
-        return b.task.updatedAt.localeCompare(a.task.updatedAt);
+      const statusDiff = taskStatusOrder[a.computedStatus] - taskStatusOrder[b.computedStatus];
+      if (statusDiff !== 0) {
+        return statusDiff;
       }
 
       const dueDiff = toDateTimestamp(a.task.dueDate) - toDateTimestamp(b.task.dueDate);
       if (dueDiff !== 0) {
         return dueDiff;
-      }
-
-      const statusDiff = taskStatusOrder[a.computedStatus] - taskStatusOrder[b.computedStatus];
-      if (statusDiff !== 0) {
-        return statusDiff;
       }
 
       return b.task.updatedAt.localeCompare(a.task.updatedAt);
@@ -2165,7 +2156,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       payload: {
         title: string;
         dueDate: string | null;
-        recurrence: Recurrence;
       }
     ): Promise<TaskItem | null> => {
       try {
@@ -2174,7 +2164,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           blockId,
           title: payload.title,
           dueDate: payload.dueDate,
-          recurrence: payload.recurrence,
           order,
           status: "todo"
         });
@@ -2193,7 +2182,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     async (payload: {
       title: string;
       dueDate: string | null;
-      recurrence: Recurrence;
     }): Promise<TaskItem | null> => {
       if (!selectedBlockId) {
         return null;
@@ -2222,8 +2210,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
     const created = await createTaskInBlock(newTaskBlockId, {
       title,
-      dueDate: null,
-      recurrence: "none"
+      dueDate: null
     });
 
     if (!created) {
@@ -2340,7 +2327,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       }
 
       setViewMode(nextMode);
-      if (nextMode === "list") {
+      if (nextMode !== "canvas") {
         setLinkDraft(null);
         setLinkPointer(null);
       }
@@ -2444,6 +2431,18 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               >
                 Список
               </button>
+              <button
+                type="button"
+                className={cn(
+                  "px-3 py-2 text-sm font-semibold transition",
+                  viewMode === "flow"
+                    ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                )}
+                onClick={() => handleChangeViewMode("flow")}
+              >
+                Flow
+              </button>
             </div>
             {viewMode === "canvas" ? (
               <button
@@ -2518,7 +2517,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   </button>
                   <div className="my-1 border-t border-slate-200/80 dark:border-slate-700/80" />
                   <div className="px-1 pb-1 pt-0.5">
-                    <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                    <div className="mb-1 px-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
                       Тема
                     </div>
                     <div className="grid grid-cols-3 gap-1">
@@ -2575,7 +2574,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         setIsMoreMenuOpen(false);
                       }}
                     >
-                      <span className="inline-flex h-[15px] w-[15px] items-center justify-center text-[11px] font-bold">
+                      <span className="inline-flex h-[15px] w-[15px] items-center justify-center text-[11px] sm:text-xs font-bold">
                         %
                       </span>
                       Масштаб 100%
@@ -2918,17 +2917,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                     const dependsOn = dependencyCount.dependsOn[block.id] ?? 0;
                     const requiredBy = dependencyCount.requiredBy[block.id] ?? 0;
                     const showAnchors = hoveredBlockId === block.id || linkDraft !== null;
-                    const todoPercent = workflow.totalOpen
-                      ? Math.round((workflow.todo / workflow.totalOpen) * 100)
-                      : 0;
-                    const inProgressPercent = workflow.totalOpen
-                      ? Math.round((workflow.inProgress / workflow.totalOpen) * 100)
-                      : 0;
-                    const blockedPercent = workflow.totalOpen
-                      ? Math.round((workflow.blocked / workflow.totalOpen) * 100)
-                      : 0;
                     const hasInProgress = workflow.inProgress > 0;
                     const indicatorColor = hasInProgress ? "#22c55e" : "#94a3b8";
+                    const blockTasksPreview = tasks
+                      .filter((task) => task.blockId === block.id)
+                      .sort(
+                        (left, right) =>
+                          taskStatusOrder[left.status] - taskStatusOrder[right.status] ||
+                          left.order - right.order ||
+                          left.updatedAt.localeCompare(right.updatedAt)
+                      )
+                      .slice(0, 3);
 
                     return (
                       <>
@@ -2963,37 +2962,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             >
                               <BlockIcon size={17} />
                             </span>
-                            <div className="flex items-center gap-1.5">
-                              <div className="line-clamp-1 text-base font-display font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                                {block.title}
-                              </div>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-white/95 text-sky-700 transition duration-100 hover:border-sky-300 hover:bg-sky-50 dark:border-sky-500/60 dark:bg-slate-900 dark:text-sky-200 dark:hover:border-sky-400 dark:hover:bg-sky-900/40",
-                                  hoveredBlockId === block.id
-                                    ? "opacity-100"
-                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
-                                )}
-                                onPointerDown={(event) => {
-                                  event.stopPropagation();
-                                  event.preventDefault();
-                                }}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleQuickAddTaskForBlock(block.id);
-                                }}
-                                title="Нова задача"
-                                aria-label={`Додати задачу у блок ${block.title}`}
-                              >
-                                <Plus size={12} />
-                              </button>
+                            <div className="line-clamp-1 text-base font-display font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                              {block.title}
                             </div>
                           </div>
                           <div className="mt-1 flex items-center gap-2">
                             <span
                               className={cn(
-                                "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-600 transition-all duration-100 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300",
+                                "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2 py-1 text-[11px] sm:text-xs font-semibold text-slate-600 transition-all duration-100 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300",
                                 hoveredBlockId === block.id
                                   ? "translate-x-0 opacity-100"
                                   : "pointer-events-none translate-x-1 opacity-0"
@@ -3018,56 +2994,104 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         </div>
 
                         {blockedMap[block.id] ? (
-                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] font-semibold text-amber-900">
+                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900">
                             <AlertTriangle size={12} />
                             Є блокуючі залежності
                           </div>
                         ) : null}
 
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <div className="rounded-lg border border-sky-100 bg-sky-50/70 px-1.5 py-1 dark:border-sky-600/40 dark:bg-sky-900/35">
-                            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-sky-700 sm:text-[10px] dark:text-sky-200">
-                              <span>До</span>
-                              <span>{workflow.todo}</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-sky-100/80 dark:bg-sky-800/60">
-                              <div
-                                className="h-full rounded-full bg-sky-500 transition-all duration-100"
-                                style={{ width: `${todoPercent}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="rounded-lg border border-emerald-100 bg-emerald-50/75 px-1.5 py-1 dark:border-emerald-600/40 dark:bg-emerald-900/35">
-                            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-emerald-700 sm:text-[10px] dark:text-emerald-200">
-                              <span>В роботі</span>
-                              <span>{workflow.inProgress}</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-emerald-100/80 dark:bg-emerald-800/60">
-                              <div
-                                className="relative h-full overflow-hidden rounded-full bg-emerald-500 transition-all duration-100"
-                                style={{ width: `${inProgressPercent}%` }}
+                        <div className="space-y-0.5">
+                          {blockTasksPreview.map((task) => {
+                            const taskDueTone = getTaskDueTone(task);
+                            const isDependentTask = Boolean(task.dependsOnTaskId);
+                            const isDependencySourceTask = dependencySourceTaskIds.has(task.id);
+                            const flowStep = taskFlowStepById.get(task.id) ?? null;
+                            return (
+                              <button
+                                key={task.id}
+                                type="button"
+                                className={cn(
+                                  "flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
+                                  "text-slate-700 hover:bg-slate-100/70 dark:text-slate-200 dark:hover:bg-slate-800/70",
+                                  isDependentTask
+                                    ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
+                                    : isDependencySourceTask
+                                      ? "ring-1 ring-violet-200/70 dark:ring-violet-500/40"
+                                      : ""
+                                )}
+                                onPointerDown={(event) => {
+                                  event.stopPropagation();
+                                  event.preventDefault();
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openBlockDrawer(block.id);
+                                }}
+                                title={task.title}
                               >
-                                {hasInProgress ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                  onPointerDown={(event) => {
+                                    event.stopPropagation();
+                                    event.preventDefault();
+                                  }}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleUpdateTask(task.id, {
+                                      status: task.status === "done" ? "todo" : "done"
+                                    });
+                                  }}
+                                  aria-label={
+                                    task.status === "done"
+                                      ? "Позначити як не виконано"
+                                      : "Позначити як виконано"
+                                  }
+                                >
+                                  {task.status === "done" ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                                </button>
+                                <span className="min-w-0 flex flex-1 items-center gap-1.5">
                                   <span
-                                    className="progress-wave absolute inset-y-0 -left-1/2 w-1/2"
-                                    aria-hidden
-                                  />
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 dark:border-slate-700 dark:bg-slate-800/80">
-                            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-700 sm:text-[10px] dark:text-slate-200">
-                              <span>Блок</span>
-                              <span>{workflow.blocked}</span>
-                            </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200/85 dark:bg-slate-700/85">
-                              <div
-                                className="h-full rounded-full bg-slate-500 transition-all duration-100"
-                                style={{ width: `${blockedPercent}%` }}
-                              />
-                            </div>
-                          </div>
+                                    className={cn(
+                                      "min-w-0 flex-1 truncate",
+                                      task.status === "done"
+                                        ? "line-through text-slate-500 dark:text-slate-400"
+                                        : "",
+                                      taskDueTone === "overdue"
+                                        ? "text-rose-700 dark:text-rose-300"
+                                        : taskDueTone === "warning"
+                                          ? "text-amber-700 dark:text-amber-300"
+                                          : ""
+                                    )}
+                                  >
+                                    {task.title}
+                                  </span>
+                                  {flowStep ? (
+                                    <span className="inline-flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 px-1 text-[10px] font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/55 dark:text-violet-100">
+                                      {flowStep}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </button>
+                            );
+                          })}
+
+                          <button
+                            type="button"
+                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-1 py-1 text-[11px] sm:text-xs font-semibold text-sky-700 transition duration-100 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                              event.preventDefault();
+                            }}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleQuickAddTaskForBlock(block.id);
+                            }}
+                            aria-label={`Додати задачу у блок ${block.title}`}
+                          >
+                            <Plus size={12} />
+                            Додати нове завдання
+                          </button>
                         </div>
                       </>
                     );
@@ -3081,66 +3105,60 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           <div className="absolute inset-0 z-10 overflow-auto px-4 pb-20 pt-[152px] md:px-6 md:pb-24 md:pt-[114px]">
             <div className="mx-auto max-w-6xl space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/92">
-                <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                  <button
-                    type="button"
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold transition",
-                      taskListScope === "active"
-                        ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    )}
-                    onClick={() => setTaskListScope("active")}
-                  >
-                    В роботі
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold transition",
-                      taskListScope === "completed"
-                        ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    )}
-                    onClick={() => setTaskListScope("completed")}
-                  >
-                    Виконані
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold transition",
-                      taskListScope === "flow"
-                        ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    )}
-                    onClick={() => setTaskListScope("flow")}
-                  >
-                    Flow
-                  </button>
-                </div>
+                {viewMode === "list" ? (
+                  <>
+                    <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-semibold transition",
+                          taskListScope === "active"
+                            ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        )}
+                        onClick={() => setTaskListScope("active")}
+                      >
+                        В роботі
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-3 py-1.5 text-xs font-semibold transition",
+                          taskListScope === "completed"
+                            ? "bg-slate-900 text-slate-50 dark:bg-sky-500 dark:text-slate-950"
+                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        )}
+                        onClick={() => setTaskListScope("completed")}
+                      >
+                        Виконані
+                      </button>
+                    </div>
 
-                <div className="ml-auto flex items-center gap-2">
-                  <select
-                    className="soft-input min-w-[150px] px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-100"
-                    value={taskListSortMode}
-                    onChange={(event) => setTaskListSortMode(event.target.value as TaskListSortMode)}
-                    aria-label="Сортування списку задач"
-                    disabled={taskListScope === "flow"}
-                  >
-                    <option value="due_date">За датою</option>
-                    <option value="status">За статусом</option>
-                    <option value="custom">Кастомне (drag)</option>
-                  </select>
-                </div>
+                    <div className="ml-auto flex items-center gap-2">
+                      <select
+                        className="soft-input min-w-[150px] px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-100"
+                        value={taskListSortMode}
+                        onChange={(event) => setTaskListSortMode(event.target.value as TaskListSortMode)}
+                        aria-label="Сортування списку задач"
+                      >
+                        <option value="default">Дефолтне</option>
+                        <option value="custom">Кастомне (drag)</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Потоки задач (Flow)
+                  </div>
+                )}
               </div>
 
-              {taskListScope !== "flow" && sortedTasksForList.length === 0 ? (
+              {viewMode !== "flow" && sortedTasksForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
                   Немає задач за поточним фільтром.
                 </div>
               ) : null}
-              {taskListScope === "flow" && flowChainsForList.length === 0 ? (
+              {viewMode === "flow" && flowChainsForList.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/70">
                   Немає потоків. Додай залежності між задачами, щоб побачити Flow.
                 </div>
@@ -3149,7 +3167,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               <div
                 className="space-y-2.5"
                 onPointerDownCapture={(event) => {
-                  if (taskListScope === "flow") {
+                  if (viewMode === "flow") {
                     return;
                   }
 
@@ -3172,7 +3190,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   setListQuickEditor(null);
                 }}
               >
-                {taskListScope === "flow"
+                {viewMode === "flow"
                   ? flowChainsForList.map((flow, flowIndex) => (
                       <article
                         key={flow.id}
@@ -3182,18 +3200,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                             Flow {flowIndex + 1}
                           </div>
-                          <div className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
+                          <div className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
                             {flow.steps.length} кроки
                           </div>
                         </div>
 
                         <div className="space-y-1.5">
                           {flow.steps.map((step, stepIndex) => {
-                            const resolvedIconName = resolveBlockIconName(step.block!);
-                            const iconOption = getBlockIconOption(resolvedIconName);
-                            const BlockIcon = iconOption.icon;
-                            const iconColor = step.block?.color ?? "#4B5563";
-
                             return (
                               <div key={`${flow.id}-${step.task.id}`}>
                                 <button
@@ -3208,37 +3221,25 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                   )}
                                   onClick={() => openBlockDrawer(step.task.blockId)}
                                 >
-                                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[11px] font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/60 dark:text-violet-100">
+                                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[11px] sm:text-xs font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/60 dark:text-violet-100">
                                     {stepIndex + 1}
                                   </span>
                                   <div className="min-w-0 flex-1">
-                                    <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                    <div className="text-sm font-semibold text-slate-900 break-words whitespace-normal dark:text-slate-100">
                                       {step.task.title}
                                     </div>
                                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                       <span
                                         className={cn(
-                                          "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em]",
+                                          "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em]",
                                           taskStatusBadgeClasses[step.computedStatus]
                                         )}
                                       >
                                         {taskStatusLabel[step.computedStatus]}
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
-                                        <span
-                                          className="inline-flex h-4 w-4 items-center justify-center rounded"
-                                          style={{
-                                            backgroundColor: `${iconColor}18`,
-                                            color: iconColor
-                                          }}
-                                        >
-                                          <BlockIcon size={10} />
-                                        </span>
-                                        {step.block?.title}
-                                      </span>
                                       <span
                                         className={cn(
-                                          "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
+                                          "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold",
                                           step.dueTone === "overdue"
                                             ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
                                             : step.dueTone === "warning"
@@ -3284,6 +3285,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 listQuickEditor?.taskId === task.id && listQuickEditor.type === "status";
                               const isDueDateEditorOpen =
                                 listQuickEditor?.taskId === task.id && listQuickEditor.type === "dueDate";
+                              const isOwnershipEditorOpen =
+                                listQuickEditor?.taskId === task.id && listQuickEditor.type === "ownership";
                               const taskDependencyOptions = dependencyTaskOptionsForList.filter(
                                 (candidate) => candidate.id !== task.id
                               );
@@ -3316,17 +3319,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                   onClick={() =>
                                     setExpandedListTaskId((current) => (current === task.id ? null : task.id))
                                   }
-                                  className={cn(
-                                    "group w-full rounded-2xl border bg-white px-4 py-3 transition",
-                                    taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
-                                    draggingTaskIdInList === task.id ? "opacity-45" : "",
-                                    dueTone === "overdue"
-                                      ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
-                                      : dueTone === "warning"
-                                        ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
-                                        : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/60 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
-                                  )}
-                                >
+                                className={cn(
+                                  "group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
+                                  taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
+                                  draggingTaskIdInList === task.id ? "opacity-45" : "",
+                                  dueTone === "overdue"
+                                    ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
+                                    : dueTone === "warning"
+                                      ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
+                                      : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/60 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-sky-500 dark:hover:bg-sky-900/30"
+                                )}
+                              >
                                   <div className="flex items-start gap-2.5">
                                     <button
                                       type="button"
@@ -3348,42 +3351,68 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                     <div className="min-w-0 flex-1">
                                       <div
                                         className={cn(
-                                          "line-clamp-2 text-base font-semibold",
+                                          "text-base font-semibold break-words whitespace-normal",
                                           task.status === "done"
                                             ? "text-slate-500 line-through dark:text-slate-400"
                                             : "text-slate-900 dark:text-slate-100"
                                         )}
                                       >
-                                        <input
-                                          className={cn(
-                                            "w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-base font-semibold outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
-                                            task.status === "done"
-                                              ? "text-slate-500 line-through dark:text-slate-400"
-                                              : "text-slate-900 dark:text-slate-100"
-                                          )}
-                                          value={draftTitle}
-                                          onClick={(event) => event.stopPropagation()}
-                                          onFocus={() => setExpandedListTaskId(task.id)}
-                                          onChange={(event) => {
-                                            setListTaskTitleDrafts((prev) => ({
-                                              ...prev,
-                                              [task.id]: event.target.value
-                                            }));
-                                          }}
-                                          onBlur={() => {
-                                            const nextTitle = draftTitle.trim();
-                                            if (nextTitle && nextTitle !== task.title) {
-                                              void handleUpdateTask(task.id, { title: nextTitle });
-                                            }
-                                          }}
-                                        />
+                                        {isExpanded ? (
+                                          <textarea
+                                            className={cn(
+                                              "w-full resize-none overflow-hidden whitespace-pre-wrap break-words rounded-md border border-transparent bg-transparent px-1 py-0.5 text-base font-semibold leading-tight outline-none transition focus:border-slate-300 dark:focus:border-slate-600",
+                                              task.status === "done"
+                                                ? "text-slate-500 line-through dark:text-slate-400"
+                                                : "text-slate-900 dark:text-slate-100"
+                                            )}
+                                            rows={1}
+                                            value={draftTitle}
+                                            onClick={(event) => event.stopPropagation()}
+                                            onFocus={() => setExpandedListTaskId(task.id)}
+                                            ref={(element) => {
+                                              if (!element) {
+                                                return;
+                                              }
+                                              element.style.height = "0px";
+                                              element.style.height = `${element.scrollHeight}px`;
+                                            }}
+                                            onInput={(event) => {
+                                              const element = event.currentTarget;
+                                              element.style.height = "0px";
+                                              element.style.height = `${element.scrollHeight}px`;
+                                            }}
+                                            onChange={(event) => {
+                                              setListTaskTitleDrafts((prev) => ({
+                                                ...prev,
+                                                [task.id]: event.target.value
+                                              }));
+                                            }}
+                                            onBlur={() => {
+                                              const nextTitle = draftTitle.trim();
+                                              if (nextTitle && nextTitle !== task.title) {
+                                                void handleUpdateTask(task.id, { title: nextTitle });
+                                              }
+                                            }}
+                                          ></textarea>
+                                        ) : (
+                                          <div
+                                            className={cn(
+                                              "w-full whitespace-normal break-words px-1 py-0.5 text-base font-semibold leading-tight",
+                                              task.status === "done"
+                                                ? "text-slate-500 line-through dark:text-slate-400"
+                                                : "text-slate-900 dark:text-slate-100"
+                                            )}
+                                          >
+                                            {task.title}
+                                          </div>
+                                        )}
                                       </div>
                                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                         <div className="relative" data-list-quick-editor="true">
                                           <button
                                             type="button"
                                             className={cn(
-                                              "rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
+                                              "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em] transition duration-100 hover:brightness-95",
                                               taskStatusBadgeClasses[computedStatus]
                                             )}
                                             onClick={(event) => {
@@ -3425,7 +3454,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           <button
                                             type="button"
                                             className={cn(
-                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100 hover:brightness-95",
+                                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100 hover:brightness-95",
                                               dueTone === "overdue"
                                                 ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
                                                 : dueTone === "warning"
@@ -3441,17 +3470,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               );
                                             }}
                                           >
-                                            <CalendarClock size={10} />
+                                            <CalendarClock size={12} />
                                             {formatTaskDueDate(task.dueDate)}
                                           </button>
                                           {isDueDateEditorOpen ? (
                                             <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                                              <div className="mb-2 grid grid-cols-3 gap-1">
+                                              <div className="mb-2 flex flex-wrap gap-1">
                                                 {quickDueDateOptions.map((option) => (
                                                   <button
                                                     key={option.value}
                                                     type="button"
-                                                    className="soft-button px-2 py-1 text-[10px] font-semibold"
+                                                    className="soft-button whitespace-nowrap px-2.5 py-1.5 text-xs font-semibold"
                                                     onClick={(event) => {
                                                       event.stopPropagation();
                                                       void handleUpdateTask(task.id, {
@@ -3464,18 +3493,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                   </button>
                                                 ))}
                                               </div>
-                                              <input
-                                                type="date"
-                                                className="soft-input mb-2 w-full px-2 py-1 text-xs"
-                                                value={task.dueDate ?? ""}
-                                                onClick={(event) => event.stopPropagation()}
-                                                onChange={(event) => {
-                                                  void handleUpdateTask(task.id, {
-                                                    dueDate: event.target.value || null
-                                                  });
-                                                  setListQuickEditor(null);
-                                                }}
-                                              />
                                               <button
                                                 type="button"
                                                 className="soft-button inline-flex w-full items-center justify-center px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-200"
@@ -3490,48 +3507,82 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             </div>
                                           ) : null}
                                         </div>
-                                        {task.recurrence !== "none" ? (
-                                          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100 px-2 py-1 text-[10px] font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
-                                            <Repeat size={10} />
-                                            {recurrenceLabelMap[task.recurrence]}
-                                          </span>
+                                        {isExpanded ? (
+                                          <div className="relative" data-list-quick-editor="true">
+                                            <button
+                                              type="button"
+                                              className={cn(
+                                                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold transition duration-100",
+                                                task.ownership === "mine"
+                                                  ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
+                                                  : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                              )}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                setListQuickEditor((current) =>
+                                                  current?.taskId === task.id && current.type === "ownership"
+                                                    ? null
+                                                    : { taskId: task.id, type: "ownership" }
+                                                );
+                                              }}
+                                            >
+                                              {task.ownership === "mine" ? "Моє" : "Делеговано"}
+                                            </button>
+                                            {isOwnershipEditorOpen ? (
+                                              <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                                {(
+                                                  [
+                                                    { value: "mine", label: "Моє" },
+                                                    { value: "delegated", label: "Делеговано" }
+                                                  ] as const
+                                                ).map((option) => (
+                                                  <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    className={cn(
+                                                      "mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition duration-100 last:mb-0",
+                                                      option.value === task.ownership
+                                                        ? "bg-sky-100 text-sky-800 dark:bg-sky-900/55 dark:text-sky-100"
+                                                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                    )}
+                                                    onClick={(event) => {
+                                                      event.stopPropagation();
+                                                      if (option.value !== task.ownership) {
+                                                        void handleUpdateTask(task.id, {
+                                                          ownership: option.value
+                                                        });
+                                                      }
+                                                      setListQuickEditor(null);
+                                                    }}
+                                                  >
+                                                    {option.label}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            ) : null}
+                                          </div>
                                         ) : null}
-                                        <button
-                                          type="button"
-                                          className={cn(
-                                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-100",
-                                            task.ownership === "mine"
-                                              ? "border-sky-200 bg-sky-100 text-sky-800 hover:bg-sky-200/80 dark:border-sky-500/55 dark:bg-sky-900/55 dark:text-sky-100 dark:hover:bg-sky-900"
-                                              : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                                          )}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            void handleUpdateTask(task.id, {
-                                              ownership: task.ownership === "mine" ? "delegated" : "mine"
-                                            });
-                                          }}
-                                        >
-                                          {task.ownership === "mine" ? "Моє" : "Делеговано"}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            openBlockDrawer(task.blockId);
-                                          }}
-                                        >
-                                          <span
-                                            className="inline-flex h-4 w-4 items-center justify-center rounded"
-                                            style={{
-                                              backgroundColor: `${iconColor}18`,
-                                              color: iconColor
+                                        {isExpanded ? (
+                                          <button
+                                            type="button"
+                                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] sm:text-xs font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              openBlockDrawer(task.blockId);
                                             }}
                                           >
-                                            <BlockIcon size={10} />
-                                          </span>
-                                          {block.title}
-                                        </button>
+                                            <span
+                                              className="inline-flex h-4 w-4 items-center justify-center rounded"
+                                              style={{
+                                                backgroundColor: `${iconColor}18`,
+                                                color: iconColor
+                                              }}
+                                            >
+                                              <BlockIcon size={12} />
+                                            </span>
+                                            {block.title}
+                                          </button>
+                                        ) : null}
                                       </div>
                                       {task.checklist.length > 0 ? (
                                         <div className="mt-2 ml-3 space-y-1.5">
@@ -3554,7 +3605,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                 <>
                                                   <input
                                                     className={cn(
-                                                      "soft-input min-w-0 flex-1 px-2 py-1 text-sm",
+                                                      "soft-input min-w-0 flex-1 px-2.5 py-2 text-base sm:text-sm",
                                                       item.done ? "line-through text-slate-500" : ""
                                                     )}
                                                     value={listEditingChecklistByItem[`${task.id}:${item.id}`] ?? item.text}
@@ -3615,7 +3666,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                       {isExpanded ? (
                                         <div className="mt-2 ml-3 flex gap-2">
                                           <input
-                                            className="soft-input w-full px-2 py-1 text-xs"
+                                            className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
                                             placeholder="Нова підзадача"
                                             value={checklistDraft}
                                             onClick={(event) => event.stopPropagation()}
@@ -3648,7 +3699,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         </div>
                                       ) : null}
                                       {computedStatus === "blocked" && dependencyTask ? (
-                                        <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] font-semibold text-amber-900">
+                                        <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900">
                                           <AlertTriangle size={12} />
                                           <span className="truncate">
                                             Блокує: {dependencyBlock?.title ?? "Блок"} / {dependencyTask.title}
@@ -3657,53 +3708,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                       ) : null}
                                       {isExpanded ? (
                                         <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
-                                          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                            <select
-                                              className="soft-input px-2 py-1 text-xs"
-                                              value={task.status}
-                                              onClick={(event) => event.stopPropagation()}
-                                              onChange={(event) => {
-                                                void handleUpdateTask(task.id, {
-                                                  status: event.target.value as TaskStatus
-                                                });
-                                              }}
-                                            >
-                                              {taskStatusOptions.map((option) => (
-                                                <option key={option.value} value={option.value}>
-                                                  {option.label}
-                                                </option>
-                                              ))}
-                                            </select>
-                                            <input
-                                              type="date"
-                                              className="soft-input px-2 py-1 text-xs"
-                                              value={task.dueDate ?? ""}
-                                              onClick={(event) => event.stopPropagation()}
-                                              onChange={(event) => {
-                                                void handleUpdateTask(task.id, {
-                                                  dueDate: event.target.value || null
-                                                });
-                                              }}
-                                            />
-                                            <select
-                                              className="soft-input px-2 py-1 text-xs"
-                                              value={task.recurrence}
-                                              onClick={(event) => event.stopPropagation()}
-                                              onChange={(event) => {
-                                                void handleUpdateTask(task.id, {
-                                                  recurrence: event.target.value as Recurrence
-                                                });
-                                              }}
-                                            >
-                                              {recurrenceOptions.map((option) => (
-                                                <option key={option.value} value={option.value}>
-                                                  {option.label}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          </div>
                                           <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
-                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
+                                            <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
                                               Залежність задачі
                                             </div>
                                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -3918,7 +3924,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               </select>
             </div>
             <div className="mb-3">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <div className="mb-1 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 Іконка блоку
               </div>
               <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
@@ -3946,7 +3952,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                 })}
               </div>
             </div>
-            <div className="mb-3 inline-flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <div className="mb-3 inline-flex items-start gap-1.5 text-[11px] sm:text-xs text-muted-foreground">
               <Link2 className="mt-0.5" size={12} />
               Після створення відкрий блок і додай задачі в окремому попапі.
             </div>
@@ -4129,11 +4135,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
       {selectedBlock ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-2 backdrop-blur-[1px] md:items-center md:p-4"
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/45 p-0 backdrop-blur-[1px] md:items-center md:p-4"
           onClick={closeBlockDrawer}
         >
           <div
-            className="h-[94vh] min-h-[60vh] w-full md:w-[50vw] md:max-w-[1100px]"
+            className="h-[100dvh] w-full md:h-[94vh] md:min-h-[60vh] md:w-[50vw] md:max-w-[1100px]"
             onClick={(event) => event.stopPropagation()}
           >
             <TaskDrawer
@@ -4141,6 +4147,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               blocks={blocks}
               tasks={selectedBlockTasks}
               allTasks={tasks}
+              taskFlowStepById={taskFlowStepById}
               autoStartCreateToken={taskDrawerCreateToken}
               autoStartCreateBlockId={taskDrawerCreateBlockId}
               dependencyBlockedTaskIds={dependencyBlockedTaskIds}
@@ -4152,7 +4159,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               onDeleteTask={handleDeleteTask}
               onMoveTask={handleMoveTask}
               onArchiveBlock={handleArchiveBlock}
-              className="h-full min-h-[60vh]"
+              className="h-full min-h-0 rounded-none md:min-h-[60vh] md:rounded-2xl"
             />
           </div>
         </div>
