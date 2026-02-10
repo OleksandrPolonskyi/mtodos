@@ -75,6 +75,8 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
     seconds: toNormalizedSeconds(task.pomodoroSeconds),
     sessions: Math.max(0, Math.floor(Number(task.pomodoroSessions ?? 0)))
   });
+  const alarmIntervalRef = useRef<number | null>(null);
+  const alarmAudioContextRef = useRef<AudioContext | null>(null);
 
   const persistPomodoro = useCallback(
     async (secondsInput: number): Promise<void> => {
@@ -155,6 +157,99 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       // Ignore audio-related errors.
     }
   }, []);
+
+  const playLoudAlarmBurst = useCallback(async (): Promise<void> => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const audioWindow = window as Window &
+        typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+      const AudioContextCtor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+      if (!AudioContextCtor) {
+        return;
+      }
+
+      if (!alarmAudioContextRef.current) {
+        alarmAudioContextRef.current = new AudioContextCtor();
+      }
+
+      const ctx = alarmAudioContextRef.current;
+      if (!ctx) {
+        return;
+      }
+
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.22, now);
+      masterGain.connect(ctx.destination);
+
+      const pulse = (frequency: number, startAt: number, duration: number): void => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const endAt = startAt + duration;
+
+        osc.type = "square";
+        osc.frequency.setValueAtTime(frequency, startAt);
+
+        gain.gain.setValueAtTime(0.0001, startAt);
+        gain.gain.exponentialRampToValueAtTime(0.28, startAt + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(startAt);
+        osc.stop(endAt);
+      };
+
+      pulse(880, now, 0.2);
+      pulse(1175, now + 0.24, 0.2);
+      pulse(880, now + 0.48, 0.2);
+
+      window.setTimeout(() => {
+        try {
+          masterGain.disconnect();
+        } catch {
+          // ignore disconnect errors
+        }
+      }, 900);
+    } catch {
+      // Ignore audio-related errors.
+    }
+  }, []);
+
+  const stopContinuousAlarm = useCallback((): void => {
+    if (alarmIntervalRef.current !== null) {
+      window.clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+
+    const context = alarmAudioContextRef.current;
+    if (context && context.state !== "closed") {
+      void context.close();
+    }
+    alarmAudioContextRef.current = null;
+  }, []);
+
+  const startContinuousAlarm = useCallback((): void => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (alarmIntervalRef.current !== null) {
+      return;
+    }
+
+    void playLoudAlarmBurst();
+    alarmIntervalRef.current = window.setInterval(() => {
+      void playLoudAlarmBurst();
+    }, 1050);
+  }, [playLoudAlarmBurst]);
 
   useEffect(() => {
     const nextSeconds = toNormalizedSeconds(task.pomodoroSeconds);
@@ -282,6 +377,21 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
   }, [breakRemainingSeconds, breakRunning, isBreakMode, playGentleChime]);
 
   useEffect(() => {
+    if (isBreakPromptOpen) {
+      startContinuousAlarm();
+      return;
+    }
+
+    stopContinuousAlarm();
+  }, [isBreakPromptOpen, startContinuousAlarm, stopContinuousAlarm]);
+
+  useEffect(() => {
+    return () => {
+      stopContinuousAlarm();
+    };
+  }, [stopContinuousAlarm]);
+
+  useEffect(() => {
     if (!running || !startedAtMs) {
       return;
     }
@@ -388,20 +498,22 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
   );
 
   const handleStartBreak = useCallback(() => {
+    stopContinuousAlarm();
     setIsBreakPromptOpen(false);
     setIsBreakDonePromptOpen(false);
     setIsBreakMode(true);
     setBreakRemainingSeconds(POMODORO_BREAK_SECONDS);
     setBreakRunning(true);
-  }, []);
+  }, [stopContinuousAlarm]);
 
   const handleContinueFocus = useCallback(() => {
+    stopContinuousAlarm();
     setIsBreakPromptOpen(false);
     const startTs = Date.now();
     setNowMs(startTs);
     setStartedAtMs(startTs);
     setRunning(true);
-  }, []);
+  }, [stopContinuousAlarm]);
 
   const handleResumeAfterBreak = useCallback(() => {
     setIsBreakDonePromptOpen(false);
@@ -413,6 +525,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
 
   const handleResetTimer = useCallback(
     (): void => {
+      stopContinuousAlarm();
       setRunning(false);
       setStartedAtMs(null);
       setBaseSeconds(0);
@@ -425,7 +538,7 @@ export function PomodoroTag({ task, onPersist, className }: PomodoroTagProps): R
       lastCompletedSessionRef.current = 0;
       void persistPomodoro(0);
     },
-    [persistPomodoro]
+    [persistPomodoro, stopContinuousAlarm]
   );
 
   const handleResetPointerDown = useCallback(

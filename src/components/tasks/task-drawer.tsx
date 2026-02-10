@@ -8,7 +8,6 @@ import {
   ArrowUp,
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
   Circle,
   ClipboardList,
   GripVertical,
@@ -576,7 +575,7 @@ export function TaskDrawer({
           <div ref={iconPickerRef} className="relative mb-1 w-fit">
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition duration-100 hover:border-sky-300 hover:bg-sky-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-sky-500 dark:hover:bg-sky-900/40"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-100 hover:border-sky-300 hover:bg-sky-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-sky-500 dark:hover:bg-sky-900/40"
               onClick={() => setIsIconPickerOpen((current) => !current)}
               aria-label="Вибрати іконку блоку"
               title="Вибрати іконку блоку"
@@ -647,12 +646,12 @@ export function TaskDrawer({
             type="button"
             disabled={creatingTask}
             className={cn(
-              "inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold leading-none text-sky-800 transition duration-100 hover:bg-sky-100 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200 dark:hover:bg-sky-900",
+              "soft-button inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-semibold leading-none text-slate-700 dark:text-slate-100",
               "disabled:cursor-not-allowed disabled:opacity-60"
             )}
             onClick={() => setIsCreateFormOpen(true)}
           >
-            <Plus size={14} />
+            <Plus size={15} />
             Нова задача
           </button>
           <button
@@ -680,9 +679,6 @@ export function TaskDrawer({
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Список задач
-          </div>
-          <div className="rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
-            {ownTasks.length}
           </div>
         </div>
 
@@ -1287,16 +1283,6 @@ export function TaskDrawer({
                     ) : null}
                   </div>
 
-                  <button
-                    type="button"
-                    className="soft-button inline-flex h-8 w-8 items-center justify-center"
-                    onClick={() => setExpandedTaskId((current) => (current === task.id ? null : task.id))}
-                  >
-                    <ChevronDown
-                      size={14}
-                      className={cn("transition duration-100", isExpanded ? "rotate-180" : "")}
-                    />
-                  </button>
                   </div>
 
                   {isExpanded ? (
