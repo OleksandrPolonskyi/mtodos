@@ -66,6 +66,8 @@ export const createTaskSchema = z.object({
   dependsOnTaskId: z.string().uuid().nullable().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   checklist: z.array(checklistItemSchema).optional(),
+  pomodoroSeconds: z.number().int().min(0).optional(),
+  pomodoroSessions: z.number().int().min(0).optional(),
   order: z.number().optional()
 });
 
@@ -77,6 +79,8 @@ export const updateTaskSchema = z.object({
   dependsOnTaskId: z.string().uuid().nullable().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   checklist: z.array(checklistItemSchema).optional(),
+  pomodoroSeconds: z.number().int().min(0).optional(),
+  pomodoroSessions: z.number().int().min(0).optional(),
   order: z.number().optional(),
   completedAt: z.string().datetime().nullable().optional()
 });

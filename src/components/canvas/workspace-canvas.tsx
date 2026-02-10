@@ -41,6 +41,7 @@ import type {
   TaskStatus
 } from "@/types/domain";
 import { TaskDrawer } from "@/components/tasks/task-drawer";
+import { PomodoroSection } from "@/components/tasks/pomodoro-section";
 import { PwaRegister } from "@/components/pwa-register";
 import { cn } from "@/lib/utils";
 import {
@@ -3741,6 +3742,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               </button>
                                             </div>
                                           </div>
+
+                                          <PomodoroSection
+                                            task={task}
+                                            onPersist={async (taskId, payload) => {
+                                              await handleUpdateTask(taskId, payload);
+                                            }}
+                                            className="mb-3"
+                                          />
+
                                           <div className="flex justify-end">
                                             <button
                                               type="button"

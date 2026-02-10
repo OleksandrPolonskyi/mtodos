@@ -26,6 +26,7 @@ import {
   getBlockIconOption,
   resolveBlockIconName
 } from "@/lib/block-icons";
+import { PomodoroSection } from "@/components/tasks/pomodoro-section";
 import { cn } from "@/lib/utils";
 
 interface NewTaskInput {
@@ -1167,6 +1168,14 @@ export function TaskDrawer({
                         </button>
                       </div>
                     </div>
+
+                    <PomodoroSection
+                      task={task}
+                      onPersist={async (taskId, payload) => {
+                        await onUpdateTask(taskId, payload);
+                      }}
+                      className="mb-3"
+                    />
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex gap-2">

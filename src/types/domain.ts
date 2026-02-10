@@ -67,6 +67,8 @@ export interface TaskItem {
   dependsOnTaskId: string | null;
   dueDate: string | null;
   checklist: ChecklistItem[];
+  pomodoroSeconds: number;
+  pomodoroSessions: number;
   order: number;
   createdAt: string;
   updatedAt: string;
