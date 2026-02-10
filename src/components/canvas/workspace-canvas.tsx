@@ -1265,6 +1265,34 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     ].filter((section) => section.activeItems.length > 0 || section.completedItems.length > 0);
   }, [sortedTasksForList]);
 
+  useEffect(() => {
+    const completedCounts: Record<"mine" | "delegated", number> = {
+      mine: 0,
+      delegated: 0
+    };
+
+    for (const section of taskSectionsForList) {
+      completedCounts[section.id] = section.completedItems.length;
+    }
+
+    setShowCompletedBySection((previous) => {
+      let hasChanges = false;
+      const next = { ...previous };
+
+      if (previous.mine && completedCounts.mine === 0) {
+        next.mine = false;
+        hasChanges = true;
+      }
+
+      if (previous.delegated && completedCounts.delegated === 0) {
+        next.delegated = false;
+        hasChanges = true;
+      }
+
+      return hasChanges ? next : previous;
+    });
+  }, [taskSectionsForList]);
+
   const moveManualTaskOrder = useCallback((draggedTaskId: string, targetTaskId: string): void => {
     if (draggedTaskId === targetTaskId) {
       return;
@@ -3373,7 +3401,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                     setExpandedListTaskId((current) => (current === task.id ? null : task.id))
                                   }
                                 className={cn(
-                                  "group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
+                                  "task-card-hover group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
                                   taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
                                   draggingTaskIdInList === task.id ? "opacity-45" : "",
                                   dueTone === "overdue"

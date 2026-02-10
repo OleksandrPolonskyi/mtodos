@@ -458,6 +458,10 @@ html.theme-dark .hover\:bg-sky-50\/70:hover {
   background-color: rgba(12, 74, 110, 0.28) !important;
 }
 
+html.theme-dark .task-card-hover:hover {
+  background-color: rgba(41, 52, 72, 0.7) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .connector-flow {
     animation: none;
