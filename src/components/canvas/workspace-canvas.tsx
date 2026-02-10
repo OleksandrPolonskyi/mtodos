@@ -83,6 +83,7 @@ interface VisualEdge {
   targetBlockId: string;
   kind: VisualEdgeKind;
   step: number | null;
+  flowColorIndex: number | null;
 }
 
 const CARD_WIDTH = 272;
@@ -108,6 +109,26 @@ const blockTypeOptions: Array<{ value: BlockType; label: string; color: string }
 
 const openTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "blocked"]);
 type TaskDueTone = "normal" | "warning" | "overdue";
+
+interface TaskListViewItem {
+  task: TaskItem;
+  computedStatus: TaskStatus;
+  dueTone: TaskDueTone;
+  block: BusinessBlock | null;
+  dependencyTask: TaskItem | null;
+  dependencyBlock: BusinessBlock | null;
+  flowStep?: number;
+  flowConnectorAfter?: boolean;
+  flowColorIndex?: number;
+}
+
+interface TaskListSection {
+  id: string;
+  title: string;
+  activeItems: TaskListViewItem[];
+  completedItems: TaskListViewItem[];
+  flowColorIndex?: number;
+}
 
 const taskStatusOrder: Record<TaskStatus, number> = {
   in_progress: 0,
@@ -139,6 +160,157 @@ const taskStatusBadgeClasses: Record<TaskStatus, string> = {
     "border border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200",
   done:
     "border border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/45 dark:bg-emerald-900/35 dark:text-emerald-100"
+};
+
+interface FlowThemeColors {
+  frameBg: string;
+  frameBorder: string;
+  connector: string;
+  edgeBase: string;
+  edgeGlow: string;
+  edgeCore: string;
+  edgeDot: string;
+  edgeStepBg: string;
+  edgeStepBorder: string;
+  edgeStepText: string;
+}
+
+const FLOW_THEME_PALETTES: Array<{ light: FlowThemeColors; dark: FlowThemeColors }> = [
+  {
+    light: {
+      frameBg: "rgba(245, 243, 255, 0.92)",
+      frameBorder: "rgba(196, 181, 253, 0.9)",
+      connector: "rgba(167, 139, 250, 0.85)",
+      edgeBase: "#a78bfa",
+      edgeGlow: "#8b5cf6",
+      edgeCore: "#f5f3ff",
+      edgeDot: "#8b5cf6",
+      edgeStepBg: "#6d28d9",
+      edgeStepBorder: "#ede9fe",
+      edgeStepText: "#ffffff"
+    },
+    dark: {
+      frameBg: "rgba(39, 22, 78, 0.62)",
+      frameBorder: "rgba(139, 92, 246, 0.66)",
+      connector: "rgba(167, 139, 250, 0.82)",
+      edgeBase: "#6d28d9",
+      edgeGlow: "#c4b5fd",
+      edgeCore: "#f5f3ff",
+      edgeDot: "#8b5cf6",
+      edgeStepBg: "#4c1d95",
+      edgeStepBorder: "#c4b5fd",
+      edgeStepText: "#f5f3ff"
+    }
+  },
+  {
+    light: {
+      frameBg: "rgba(239, 246, 255, 0.92)",
+      frameBorder: "rgba(147, 197, 253, 0.9)",
+      connector: "rgba(96, 165, 250, 0.85)",
+      edgeBase: "#93c5fd",
+      edgeGlow: "#2563eb",
+      edgeCore: "#eff6ff",
+      edgeDot: "#2563eb",
+      edgeStepBg: "#1d4ed8",
+      edgeStepBorder: "#dbeafe",
+      edgeStepText: "#ffffff"
+    },
+    dark: {
+      frameBg: "rgba(15, 38, 73, 0.58)",
+      frameBorder: "rgba(59, 130, 246, 0.62)",
+      connector: "rgba(96, 165, 250, 0.8)",
+      edgeBase: "#2563eb",
+      edgeGlow: "#93c5fd",
+      edgeCore: "#e0f2fe",
+      edgeDot: "#60a5fa",
+      edgeStepBg: "#1e3a8a",
+      edgeStepBorder: "#93c5fd",
+      edgeStepText: "#eff6ff"
+    }
+  },
+  {
+    light: {
+      frameBg: "rgba(236, 253, 245, 0.92)",
+      frameBorder: "rgba(110, 231, 183, 0.9)",
+      connector: "rgba(52, 211, 153, 0.82)",
+      edgeBase: "#6ee7b7",
+      edgeGlow: "#059669",
+      edgeCore: "#ecfdf5",
+      edgeDot: "#059669",
+      edgeStepBg: "#047857",
+      edgeStepBorder: "#d1fae5",
+      edgeStepText: "#ffffff"
+    },
+    dark: {
+      frameBg: "rgba(6, 44, 35, 0.58)",
+      frameBorder: "rgba(16, 185, 129, 0.62)",
+      connector: "rgba(52, 211, 153, 0.78)",
+      edgeBase: "#10b981",
+      edgeGlow: "#6ee7b7",
+      edgeCore: "#d1fae5",
+      edgeDot: "#34d399",
+      edgeStepBg: "#065f46",
+      edgeStepBorder: "#6ee7b7",
+      edgeStepText: "#ecfdf5"
+    }
+  },
+  {
+    light: {
+      frameBg: "rgba(255, 247, 237, 0.92)",
+      frameBorder: "rgba(253, 186, 116, 0.9)",
+      connector: "rgba(251, 146, 60, 0.82)",
+      edgeBase: "#fdba74",
+      edgeGlow: "#ea580c",
+      edgeCore: "#fff7ed",
+      edgeDot: "#ea580c",
+      edgeStepBg: "#c2410c",
+      edgeStepBorder: "#fed7aa",
+      edgeStepText: "#ffffff"
+    },
+    dark: {
+      frameBg: "rgba(67, 30, 7, 0.62)",
+      frameBorder: "rgba(249, 115, 22, 0.66)",
+      connector: "rgba(251, 146, 60, 0.78)",
+      edgeBase: "#f97316",
+      edgeGlow: "#fdba74",
+      edgeCore: "#ffedd5",
+      edgeDot: "#fb923c",
+      edgeStepBg: "#9a3412",
+      edgeStepBorder: "#fdba74",
+      edgeStepText: "#fff7ed"
+    }
+  },
+  {
+    light: {
+      frameBg: "rgba(252, 242, 248, 0.92)",
+      frameBorder: "rgba(244, 114, 182, 0.88)",
+      connector: "rgba(236, 72, 153, 0.82)",
+      edgeBase: "#f9a8d4",
+      edgeGlow: "#db2777",
+      edgeCore: "#fdf2f8",
+      edgeDot: "#db2777",
+      edgeStepBg: "#be185d",
+      edgeStepBorder: "#fbcfe8",
+      edgeStepText: "#ffffff"
+    },
+    dark: {
+      frameBg: "rgba(73, 14, 47, 0.6)",
+      frameBorder: "rgba(236, 72, 153, 0.64)",
+      connector: "rgba(244, 114, 182, 0.78)",
+      edgeBase: "#db2777",
+      edgeGlow: "#f9a8d4",
+      edgeCore: "#fdf2f8",
+      edgeDot: "#f472b6",
+      edgeStepBg: "#9d174d",
+      edgeStepBorder: "#f9a8d4",
+      edgeStepText: "#fdf2f8"
+    }
+  }
+];
+
+const getFlowThemeColors = (flowIndex: number, theme: "light" | "dark"): FlowThemeColors => {
+  const palette = FLOW_THEME_PALETTES[((flowIndex % FLOW_THEME_PALETTES.length) + FLOW_THEME_PALETTES.length) % FLOW_THEME_PALETTES.length];
+  return theme === "dark" ? palette.dark : palette.light;
 };
 
 const toLocalDateString = (date: Date): string => {
@@ -1082,17 +1254,24 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     }
 
     const taskEdgeStep = new Map<string, number>();
+    const taskEdgeFlowIndex = new Map<string, number>();
 
-    for (const chain of uniqueChains) {
+    uniqueChains.forEach((chain, chainIndex) => {
       for (let index = 1; index < chain.length; index += 1) {
         const edgeKey = `${chain[index - 1]}::${chain[index]}`;
         const step = index;
-        const current = taskEdgeStep.get(edgeKey);
-        taskEdgeStep.set(edgeKey, current ? Math.min(current, step) : step);
-      }
-    }
+        const currentStep = taskEdgeStep.get(edgeKey);
+        taskEdgeStep.set(edgeKey, currentStep ? Math.min(currentStep, step) : step);
 
-    return { chains: uniqueChains, taskEdgeStep };
+        const currentFlowIndex = taskEdgeFlowIndex.get(edgeKey);
+        taskEdgeFlowIndex.set(
+          edgeKey,
+          currentFlowIndex !== undefined ? Math.min(currentFlowIndex, chainIndex) : chainIndex
+        );
+      }
+    });
+
+    return { chains: uniqueChains, taskEdgeStep, taskEdgeFlowIndex };
   }, [tasks]);
 
   const flowChainsForList = useMemo(() => {
@@ -1127,7 +1306,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
         return {
           id: `flow-${chainIndex + 1}`,
-          steps
+          steps,
+          flowColorIndex: chainIndex
         };
       })
       .filter((flow) => flow.steps.length > 1)
@@ -1186,7 +1366,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     [tasks]
   );
 
-  const sortedTasksForList = useMemo(() => {
+  const sortedTasksForList = useMemo<TaskListViewItem[]>(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
     const manualOrderIndex = new Map(taskListManualOrder.map((id, index) => [id, index]));
 
@@ -1241,7 +1421,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     return visible;
   }, [blocksById, dependencyBlockedTaskIds, taskListManualOrder, taskListSortMode, tasks]);
 
-  const taskSectionsForList = useMemo(() => {
+  const taskSectionsForList = useMemo<TaskListSection[]>(() => {
     const myTasks = sortedTasksForList.filter((item) => item.task.ownership === "mine");
     const delegatedTasks = sortedTasksForList.filter((item) => item.task.ownership === "delegated");
     const myActive = myTasks.filter((item) => item.computedStatus !== "done");
@@ -1265,6 +1445,30 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     ].filter((section) => section.activeItems.length > 0 || section.completedItems.length > 0);
   }, [sortedTasksForList]);
 
+  const sectionsForCurrentView = useMemo<TaskListSection[]>(() => {
+    if (viewMode !== "flow") {
+      return taskSectionsForList;
+    }
+
+    return flowChainsForList.map((flow, flowIndex) => ({
+      id: flow.id,
+      title: `Потік ${flowIndex + 1}`,
+      flowColorIndex: flow.flowColorIndex,
+      activeItems: flow.steps.map((step, stepIndex) => ({
+        task: step.task,
+        computedStatus: step.computedStatus,
+        dueTone: step.dueTone,
+        block: step.block,
+        dependencyTask: step.dependencyTask,
+        dependencyBlock: step.dependencyBlock,
+        flowStep: stepIndex + 1,
+        flowConnectorAfter: stepIndex < flow.steps.length - 1,
+        flowColorIndex: flow.flowColorIndex
+      })),
+      completedItems: []
+    }));
+  }, [flowChainsForList, taskSectionsForList, viewMode]);
+
   useEffect(() => {
     const completedCounts: Record<"mine" | "delegated", number> = {
       mine: 0,
@@ -1272,7 +1476,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     };
 
     for (const section of taskSectionsForList) {
-      completedCounts[section.id] = section.completedItems.length;
+      if (section.id === "mine" || section.id === "delegated") {
+        completedCounts[section.id] = section.completedItems.length;
+      }
     }
 
     setShowCompletedBySection((previous) => {
@@ -1577,7 +1783,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       sourceBlockId: edge.sourceBlockId,
       targetBlockId: edge.targetBlockId,
       kind: "manual" as const,
-      step: null
+      step: null,
+      flowColorIndex: null
     }));
 
     const existingPairs = new Set(
@@ -1601,6 +1808,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       const targetBlockId = task.blockId;
       const pairKey = `${sourceBlockId}::${targetBlockId}`;
       const edgeStep = flowInsights.taskEdgeStep.get(`${dependencyTask.id}::${task.id}`) ?? 1;
+      const edgeFlowColorIndex =
+        flowInsights.taskEdgeFlowIndex.get(`${dependencyTask.id}::${task.id}`) ?? 0;
 
       if (existingPairs.has(pairKey)) {
         continue;
@@ -1610,7 +1819,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       if (existingAuto) {
         autoEdgesByPair.set(pairKey, {
           ...existingAuto,
-          step: existingAuto.step ? Math.min(existingAuto.step, edgeStep) : edgeStep
+          step: existingAuto.step ? Math.min(existingAuto.step, edgeStep) : edgeStep,
+          flowColorIndex:
+            existingAuto.flowColorIndex === null
+              ? edgeFlowColorIndex
+              : Math.min(existingAuto.flowColorIndex, edgeFlowColorIndex)
         });
         continue;
       }
@@ -1620,12 +1833,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         sourceBlockId,
         targetBlockId,
         kind: "task_dependency",
-        step: edgeStep
+        step: edgeStep,
+        flowColorIndex: edgeFlowColorIndex
       });
     }
 
     return [...manualEdges, ...autoEdgesByPair.values()];
-  }, [edges, flowInsights.taskEdgeStep, tasks]);
+  }, [edges, flowInsights.taskEdgeFlowIndex, flowInsights.taskEdgeStep, tasks]);
 
   const edgePaths = useMemo(() => {
     return visualEdges
@@ -1646,6 +1860,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           id: edge.id,
           kind: edge.kind,
           step: edge.step,
+          flowColorIndex: edge.flowColorIndex,
           d,
           blocked: edge.kind === "manual" ? blockedMap[edge.sourceBlockId] ?? false : false,
           startX: start.x,
@@ -1663,6 +1878,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
           id: string;
           kind: VisualEdgeKind;
           step: number | null;
+          flowColorIndex: number | null;
           d: string;
           blocked: boolean;
           startX: number;
@@ -2753,16 +2969,20 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   />
                 ) : null}
                 <svg className="pointer-events-none absolute inset-0 z-[2] h-full w-full" aria-hidden>
-                {edgePaths.map((edge) => (
+                {edgePaths.map((edge) => {
+                  const flowTheme =
+                    edge.kind === "task_dependency"
+                      ? getFlowThemeColors(edge.flowColorIndex ?? 0, resolvedTheme)
+                      : null;
+
+                  return (
                   <g key={edge.id}>
                     <path
                       d={edge.d}
                       fill="none"
                       stroke={
                         edge.kind === "task_dependency"
-                          ? resolvedTheme === "dark"
-                            ? "#6d28d9"
-                            : "#a78bfa"
+                          ? flowTheme?.edgeBase ?? "#a78bfa"
                           : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#64748b"
@@ -2799,9 +3019,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       )}
                       stroke={
                         edge.kind === "task_dependency"
-                          ? resolvedTheme === "dark"
-                            ? "#c4b5fd"
-                            : "#8b5cf6"
+                          ? flowTheme?.edgeGlow ?? "#8b5cf6"
                           : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#fcd34d"
@@ -2838,9 +3056,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       )}
                       stroke={
                         edge.kind === "task_dependency"
-                          ? resolvedTheme === "dark"
-                            ? "#f5f3ff"
-                            : "#ede9fe"
+                          ? flowTheme?.edgeCore ?? "#ede9fe"
                           : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#fef3c7"
@@ -2860,9 +3076,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       r={1.8}
                       fill={
                         edge.kind === "task_dependency"
-                          ? resolvedTheme === "dark"
-                            ? "#8b5cf6"
-                            : "#a78bfa"
+                          ? flowTheme?.edgeDot ?? "#a78bfa"
                           : resolvedTheme === "dark"
                             ? "#94a3b8"
                             : "#cbd5e1"
@@ -2883,9 +3097,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       r={1.8}
                       fill={
                         edge.kind === "task_dependency"
-                          ? resolvedTheme === "dark"
-                            ? "#8b5cf6"
-                            : "#a78bfa"
+                          ? flowTheme?.edgeDot ?? "#a78bfa"
                           : resolvedTheme === "dark"
                             ? "#94a3b8"
                             : "#cbd5e1"
@@ -2906,9 +3118,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                           cx={edge.midX}
                           cy={edge.midY}
                           r={8}
-                          fill={resolvedTheme === "dark" ? "#4c1d95" : "#6d28d9"}
+                          fill={flowTheme?.edgeStepBg ?? (resolvedTheme === "dark" ? "#4c1d95" : "#6d28d9")}
                           fillOpacity={resolvedTheme === "dark" ? 0.92 : 0.9}
-                          stroke={resolvedTheme === "dark" ? "#c4b5fd" : "#ede9fe"}
+                          stroke={flowTheme?.edgeStepBorder ?? (resolvedTheme === "dark" ? "#c4b5fd" : "#ede9fe")}
                           strokeWidth={1}
                         />
                         <text
@@ -2916,7 +3128,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                           y={edge.midY + 0.8}
                           textAnchor="middle"
                           dominantBaseline="middle"
-                          fill={resolvedTheme === "dark" ? "#f5f3ff" : "#ffffff"}
+                          fill={flowTheme?.edgeStepText ?? (resolvedTheme === "dark" ? "#f5f3ff" : "#ffffff")}
                           fontSize="8"
                           fontWeight="700"
                         >
@@ -2925,7 +3137,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       </g>
                     ) : null}
                   </g>
-                ))}
+                  );
+                })}
                   {draftConnector ? (
                   <g>
                     <path
@@ -3218,10 +3431,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               <div
                 className="space-y-2.5"
                 onPointerDownCapture={(event) => {
-                  if (viewMode === "flow") {
-                    return;
-                  }
-
                   const target = event.target as HTMLElement | null;
                   if (!target) {
                     setExpandedListTaskId(null);
@@ -3243,88 +3452,45 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                   setListDependencyEditorOpenByTask({});
                 }}
               >
-                {viewMode === "flow"
-                  ? flowChainsForList.map((flow, flowIndex) => (
-                      <article
-                        key={flow.id}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900/90"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            Потік {flowIndex + 1}
-                          </div>
-                          <div className="rounded-full border border-violet-200 bg-violet-100 px-2 py-0.5 text-[11px] sm:text-xs font-semibold text-violet-700 dark:border-violet-500/50 dark:bg-violet-900/45 dark:text-violet-100">
-                            {flow.steps.length} кроки
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          {flow.steps.map((step, stepIndex) => {
-                            return (
-                              <div key={`${flow.id}-${step.task.id}`}>
-                                <button
-                                  type="button"
-                                  className={cn(
-                                    "flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition",
-                                    step.dueTone === "overdue"
-                                      ? "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
-                                      : step.dueTone === "warning"
-                                        ? "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
-                                        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/92"
-                                  )}
-                                  onClick={() => openBlockDrawer(step.task.blockId)}
-                                >
-                                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[11px] sm:text-xs font-bold text-violet-700 dark:border-violet-500/60 dark:bg-violet-900/60 dark:text-violet-100">
-                                    {stepIndex + 1}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-sm font-semibold text-slate-900 break-words whitespace-normal dark:text-slate-100">
-                                      {step.task.title}
-                                    </div>
-                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                      <span
-                                        className={cn(
-                                          "rounded-full px-2 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-[0.07em]",
-                                          taskStatusBadgeClasses[step.computedStatus]
-                                        )}
-                                      >
-                                        {taskStatusLabel[step.computedStatus]}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] sm:text-xs font-semibold",
-                                          step.dueTone === "overdue"
-                                            ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
-                                            : step.dueTone === "warning"
-                                              ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
-                                              : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                                        )}
-                                      >
-                                        {formatTaskDueDate(step.task.dueDate)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </button>
-
-                                {stepIndex < flow.steps.length - 1 ? (
-                                  <div className="ml-6 mt-1 h-4 w-px bg-violet-300/80 dark:bg-violet-500/60" />
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    ))
-                  : taskSectionsForList.map((section) => {
-                      const sectionCompletedVisible = showCompletedBySection[section.id];
+                {sectionsForCurrentView.map((section) => {
+                      const canToggleCompleted = section.id === "mine" || section.id === "delegated";
+                      const sectionFlowTheme =
+                        viewMode === "flow" && typeof section.flowColorIndex === "number"
+                          ? getFlowThemeColors(section.flowColorIndex, resolvedTheme)
+                          : null;
+                      const sectionCompletedVisible = canToggleCompleted
+                        ? showCompletedBySection[section.id as "mine" | "delegated"]
+                        : false;
                       const visibleItems = sectionCompletedVisible
                         ? section.completedItems
                         : section.activeItems;
-                      const hasCompleted = section.completedItems.length > 0;
+                      const hasCompleted = canToggleCompleted && section.completedItems.length > 0;
                       return (
-                      <section key={section.id} className="space-y-2">
+                      <section
+                        key={section.id}
+                        className={cn(
+                          "space-y-2",
+                          viewMode === "flow"
+                            ? "rounded-2xl border px-3 py-3 md:px-4 md:py-4"
+                            : ""
+                        )}
+                        style={
+                          sectionFlowTheme
+                            ? {
+                                borderColor: sectionFlowTheme.frameBorder,
+                                backgroundColor: sectionFlowTheme.frameBg
+                              }
+                            : undefined
+                        }
+                      >
                         <div className="flex items-center justify-between gap-2 px-1">
-                          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                            {sectionFlowTheme ? (
+                              <span
+                                className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: sectionFlowTheme.edgeGlow }}
+                              />
+                            ) : null}
                             {section.title}
                           </div>
                           {hasCompleted ? (
@@ -3332,9 +3498,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               type="button"
                               className="text-xs font-semibold text-sky-700 transition hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
                               onClick={() => {
+                                if (!canToggleCompleted) {
+                                  return;
+                                }
                                 setShowCompletedBySection((prev) => ({
                                   ...prev,
-                                  [section.id]: !prev[section.id]
+                                  [section.id]: !prev[section.id as "mine" | "delegated"]
                                 }));
                               }}
                             >
@@ -3344,7 +3513,17 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         </div>
                         <div className="space-y-2.5">
                           {visibleItems.map(
-                            ({ task, block, computedStatus, dueTone, dependencyTask, dependencyBlock }) => {
+                            ({
+                              task,
+                              block,
+                              computedStatus,
+                              dueTone,
+                              dependencyTask,
+                              dependencyBlock,
+                              flowStep,
+                              flowConnectorAfter,
+                              flowColorIndex
+                            }) => {
                               if (!block) {
                                 return null;
                               }
@@ -3368,29 +3547,33 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 listQuickEditor?.taskId === task.id && listQuickEditor.type === "dueDate";
                               const isOwnershipEditorOpen =
                                 listQuickEditor?.taskId === task.id && listQuickEditor.type === "ownership";
+                              const flowTheme =
+                                typeof flowColorIndex === "number"
+                                  ? getFlowThemeColors(flowColorIndex, resolvedTheme)
+                                  : null;
                               const taskDependencyOptions = dependencyTaskOptionsForList.filter(
                                 (candidate) => candidate.id !== task.id
                               );
 
                               return (
+                                <div key={task.id}>
                                 <article
-                                  key={task.id}
                                   data-list-task-item="true"
-                                  draggable={taskListSortMode === "custom"}
+                                  draggable={viewMode !== "flow" && taskListSortMode === "custom"}
                                   onDragStart={() => {
-                                    if (taskListSortMode !== "custom") {
+                                    if (viewMode === "flow" || taskListSortMode !== "custom") {
                                       return;
                                     }
                                     setDraggingTaskIdInList(task.id);
                                   }}
                                   onDragEnter={() => {
-                                    if (taskListSortMode !== "custom" || !draggingTaskIdInList) {
+                                    if (viewMode === "flow" || taskListSortMode !== "custom" || !draggingTaskIdInList) {
                                       return;
                                     }
                                     moveManualTaskOrder(draggingTaskIdInList, task.id);
                                   }}
                                   onDragOver={(event) => {
-                                    if (taskListSortMode !== "custom") {
+                                    if (viewMode === "flow" || taskListSortMode !== "custom") {
                                       return;
                                     }
                                     event.preventDefault();
@@ -3402,7 +3585,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                   }
                                 className={cn(
                                   "group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
-                                  taskListSortMode === "custom" ? "cursor-grab active:cursor-grabbing" : "",
+                                  viewMode !== "flow" && taskListSortMode === "custom"
+                                    ? "cursor-grab active:cursor-grabbing"
+                                    : "",
                                   draggingTaskIdInList === task.id ? "opacity-45" : "",
                                   task.ownership === "delegated"
                                     ? canUseHoverInteractions
@@ -3626,6 +3811,22 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               await handleUpdateTask(taskId, payload);
                                             }}
                                           />
+                                        ) : null}
+                                        {typeof flowStep === "number" ? (
+                                          <span
+                                            className="ml-auto inline-flex min-h-7 min-w-7 items-center justify-center rounded-full border px-2 py-1 text-xs sm:text-sm font-bold leading-none"
+                                            style={
+                                              flowTheme
+                                                ? {
+                                                    borderColor: flowTheme.edgeStepBorder,
+                                                    backgroundColor: flowTheme.edgeStepBg,
+                                                    color: flowTheme.edgeStepText
+                                                  }
+                                                : undefined
+                                            }
+                                          >
+                                            {flowStep}
+                                          </span>
                                         ) : null}
                                         {isExpanded ? (
                                           <div className="relative" data-list-quick-editor="true">
@@ -3957,6 +4158,19 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                     </div>
                                   </div>
                                 </article>
+                                {viewMode === "flow" && flowConnectorAfter ? (
+                                  <div
+                                    className="ml-7 mt-1 h-4 w-px"
+                                    style={{
+                                      backgroundColor:
+                                        flowTheme?.connector ??
+                                        (resolvedTheme === "dark"
+                                          ? "rgba(139, 92, 246, 0.6)"
+                                          : "rgba(167, 139, 250, 0.8)")
+                                    }}
+                                  />
+                                ) : null}
+                                </div>
                               );
                             }
                           )}
@@ -3969,7 +4183,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                           ) : null}
                         </div>
                       </section>
-                    )})}
+                    );
+                    })}
               </div>
             </div>
           </div>
