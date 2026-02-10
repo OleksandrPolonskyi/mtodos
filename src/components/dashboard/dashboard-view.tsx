@@ -60,8 +60,8 @@ const toDateKeyFromIso = (isoValue: string | null, timezone: string): string | n
 };
 
 const shiftDateKey = (key: string, days: number): string => {
-  const parsed = new Date(`${key}T00:00:00`);
-  parsed.setDate(parsed.getDate() + days);
+  const parsed = new Date(`${key}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
 };
 
