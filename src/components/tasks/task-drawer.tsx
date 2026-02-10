@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Circle,
   ClipboardList,
+  GripVertical,
   Plus,
   Trash2,
   X
@@ -155,6 +156,28 @@ const quickDueDateOptions = [
   { value: "weekend", label: "На вихідних" }
 ] as const;
 
+const reorderChecklistItems = (
+  checklist: ChecklistItem[],
+  draggedItemId: string,
+  targetItemId: string
+): ChecklistItem[] => {
+  if (draggedItemId === targetItemId) {
+    return checklist;
+  }
+
+  const nextChecklist = [...checklist];
+  const draggedIndex = nextChecklist.findIndex((item) => item.id === draggedItemId);
+  const targetIndex = nextChecklist.findIndex((item) => item.id === targetItemId);
+
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return checklist;
+  }
+
+  const [draggedItem] = nextChecklist.splice(draggedIndex, 1);
+  nextChecklist.splice(targetIndex, 0, draggedItem);
+  return nextChecklist;
+};
+
 const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone => {
   if (!dueDate || status === "done") {
     return "normal";
@@ -211,6 +234,10 @@ export function TaskDrawer({
   const [checklistDraft, setChecklistDraft] = useState<Record<string, string>>({});
   const [checklistComposerOpenByTask, setChecklistComposerOpenByTask] = useState<Record<string, boolean>>({});
   const [editingChecklistByItem, setEditingChecklistByItem] = useState<Record<string, string>>({});
+  const [draggingChecklistItem, setDraggingChecklistItem] = useState<{
+    taskId: string;
+    itemId: string;
+  } | null>(null);
   const [editingTitleByTask, setEditingTitleByTask] = useState<Record<string, string>>({});
   const [dependencyEditorOpenByTask, setDependencyEditorOpenByTask] = useState<Record<string, boolean>>({});
   const [creatingTask, setCreatingTask] = useState(false);
@@ -760,9 +787,9 @@ export function TaskDrawer({
                   className={cn(
                     "relative overflow-visible rounded-xl border bg-white p-3 transition-colors duration-100 dark:bg-slate-900/92",
                     isDependentTask
-                      ? "border-violet-300 hover:border-violet-400 dark:border-violet-500/70 dark:hover:border-violet-400"
+                      ? "border-violet-300 hover:border-violet-400 dark:border-violet-500/70 dark:hover:border-violet-400/80"
                       : isDependencySourceTask
-                        ? "border-violet-200 hover:border-violet-300 dark:border-violet-500/45 dark:hover:border-violet-500/70"
+                        ? "border-violet-200 hover:border-violet-300 dark:border-violet-500/45 dark:hover:border-violet-400/70"
                         : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-500"
                   )}
                   onClick={(event) => {
@@ -1020,7 +1047,70 @@ export function TaskDrawer({
                       <div className="mt-2 border-t border-slate-200/70 pt-2 dark:border-slate-700/70">
                         <div className="ml-3 space-y-1.5">
                           {task.checklist.map((item) => (
-                            <div key={item.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                            <div
+                              key={item.id}
+                              className={cn(
+                                "flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200",
+                                draggingChecklistItem?.taskId === task.id &&
+                                  draggingChecklistItem.itemId === item.id
+                                  ? "opacity-55"
+                                  : ""
+                              )}
+                              onDragOver={(event) => {
+                                if (!isExpanded || draggingChecklistItem?.taskId !== task.id) {
+                                  return;
+                                }
+                                event.preventDefault();
+                              }}
+                              onDrop={async (event) => {
+                                if (!isExpanded || draggingChecklistItem?.taskId !== task.id) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                event.stopPropagation();
+
+                                if (draggingChecklistItem.itemId === item.id) {
+                                  setDraggingChecklistItem(null);
+                                  return;
+                                }
+
+                                const nextChecklist = reorderChecklistItems(
+                                  task.checklist,
+                                  draggingChecklistItem.itemId,
+                                  item.id
+                                );
+                                if (nextChecklist !== task.checklist) {
+                                  await onUpdateTask(task.id, { checklist: nextChecklist });
+                                }
+                                setDraggingChecklistItem(null);
+                              }}
+                            >
+                              {isExpanded ? (
+                                <button
+                                  type="button"
+                                  draggable
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 cursor-grab active:cursor-grabbing dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                  }}
+                                  onDragStart={(event) => {
+                                    event.stopPropagation();
+                                    setDraggingChecklistItem({
+                                      taskId: task.id,
+                                      itemId: item.id
+                                    });
+                                    event.dataTransfer.effectAllowed = "move";
+                                    event.dataTransfer.setData("text/plain", item.id);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingChecklistItem(null);
+                                  }}
+                                  aria-label="Перемістити підзадачу"
+                                  title="Перемістити підзадачу"
+                                >
+                                  <GripVertical size={14} />
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-200"

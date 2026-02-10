@@ -13,6 +13,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Circle,
+  GripVertical,
   LayoutDashboard,
   Link2,
   ListTree,
@@ -37,6 +38,7 @@ import type {
   BlockEdge,
   BlockType,
   BusinessBlock,
+  ChecklistItem,
   TaskItem,
   TaskStatus
 } from "@/types/domain";
@@ -150,6 +152,28 @@ const taskStatusOptions: Array<{ value: TaskStatus; label: string }> = [
   { value: "blocked", label: "Заблоковано" },
   { value: "done", label: "Готово" }
 ];
+
+const reorderChecklistItems = (
+  checklist: ChecklistItem[],
+  draggedItemId: string,
+  targetItemId: string
+): ChecklistItem[] => {
+  if (draggedItemId === targetItemId) {
+    return checklist;
+  }
+
+  const nextChecklist = [...checklist];
+  const draggedIndex = nextChecklist.findIndex((item) => item.id === draggedItemId);
+  const targetIndex = nextChecklist.findIndex((item) => item.id === targetItemId);
+
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return checklist;
+  }
+
+  const [draggedItem] = nextChecklist.splice(draggedIndex, 1);
+  nextChecklist.splice(targetIndex, 0, draggedItem);
+  return nextChecklist;
+};
 
 const taskStatusBadgeClasses: Record<TaskStatus, string> = {
   todo:
@@ -471,6 +495,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [listChecklistDrafts, setListChecklistDrafts] = useState<Record<string, string>>({});
   const [listChecklistComposerOpenByTask, setListChecklistComposerOpenByTask] = useState<Record<string, boolean>>({});
   const [listEditingChecklistByItem, setListEditingChecklistByItem] = useState<Record<string, string>>({});
+  const [listDraggingChecklistItem, setListDraggingChecklistItem] = useState<{
+    taskId: string;
+    itemId: string;
+  } | null>(null);
   const [listDependencyEditorOpenByTask, setListDependencyEditorOpenByTask] = useState<Record<string, boolean>>({});
   const [taskDrawerCreateToken, setTaskDrawerCreateToken] = useState(0);
   const [taskDrawerCreateBlockId, setTaskDrawerCreateBlockId] = useState<string | null>(null);
@@ -3303,14 +3331,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                     "flex w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-1 text-left text-[13px] font-medium leading-tight transition duration-100",
                                     canUseHoverInteractions
                                       ? isDependentTask
-                                        ? "text-slate-700 hover:border-violet-400 dark:text-slate-200 dark:hover:border-violet-400"
+                                        ? "text-slate-700 hover:border-violet-400 dark:text-slate-200 dark:hover:border-violet-400/80"
                                         : isDependencySourceTask
-                                          ? "text-slate-700 hover:border-violet-300 dark:text-slate-200 dark:hover:border-violet-500/70"
+                                          ? "text-slate-700 hover:border-violet-300 dark:text-slate-200 dark:hover:border-violet-400/70"
                                           : taskDueTone === "overdue"
                                             ? "text-slate-700 hover:border-rose-300 dark:text-slate-200 dark:hover:border-rose-400"
                                             : taskDueTone === "warning"
                                               ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
-                                              : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
+                                            : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
                                       : "text-slate-700 dark:text-slate-200",
                                     isDependentTask
                                       ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
@@ -3607,28 +3635,46 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 )}
                               >
                                   <div className="flex items-start gap-2.5">
-                                    <button
-                                      type="button"
-                                      className={cn(
-                                        "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
-                                        canUseHoverInteractions
-                                          ? "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-300"
-                                          : ""
-                                      )}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        void handleUpdateTask(task.id, {
-                                          status: task.status === "done" ? "todo" : "done"
-                                        });
-                                      }}
-                                      aria-label={
-                                        task.status === "done"
-                                          ? "Позначити як не виконано"
-                                          : "Позначити як виконано"
-                                      }
-                                    >
-                                      {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                                    </button>
+                                    <div className="mt-0.5 flex shrink-0 flex-col items-center gap-1">
+                                      <button
+                                        type="button"
+                                        className={cn(
+                                          "inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                                          canUseHoverInteractions
+                                            ? "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-300"
+                                            : ""
+                                        )}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void handleUpdateTask(task.id, {
+                                            status: task.status === "done" ? "todo" : "done"
+                                          });
+                                        }}
+                                        aria-label={
+                                          task.status === "done"
+                                            ? "Позначити як не виконано"
+                                            : "Позначити як виконано"
+                                        }
+                                      >
+                                        {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+                                      </button>
+                                      {typeof flowStep === "number" ? (
+                                        <span
+                                          className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full border px-1.5 py-0.5 text-[10px] sm:text-xs font-bold leading-none"
+                                          style={
+                                            flowTheme
+                                              ? {
+                                                  borderColor: flowTheme.edgeStepBorder,
+                                                  backgroundColor: flowTheme.edgeStepBg,
+                                                  color: flowTheme.edgeStepText
+                                                }
+                                              : undefined
+                                          }
+                                        >
+                                          {flowStep}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     <div className="min-w-0 flex-1">
                                       <div
                                         className={cn(
@@ -3812,22 +3858,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             }}
                                           />
                                         ) : null}
-                                        {typeof flowStep === "number" ? (
-                                          <span
-                                            className="ml-auto inline-flex min-h-7 min-w-7 items-center justify-center rounded-full border px-2 py-1 text-xs sm:text-sm font-bold leading-none"
-                                            style={
-                                              flowTheme
-                                                ? {
-                                                    borderColor: flowTheme.edgeStepBorder,
-                                                    backgroundColor: flowTheme.edgeStepBg,
-                                                    color: flowTheme.edgeStepText
-                                                  }
-                                                : undefined
-                                            }
-                                          >
-                                            {flowStep}
-                                          </span>
-                                        ) : null}
                                         {isExpanded ? (
                                           <div className="relative" data-list-quick-editor="true">
                                             <button
@@ -3914,7 +3944,70 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                       {task.checklist.length > 0 ? (
                                         <div className="mt-2 ml-3 space-y-1.5">
                                           {task.checklist.map((item) => (
-                                            <div key={item.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                            <div
+                                              key={item.id}
+                                              className={cn(
+                                                "flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200",
+                                                listDraggingChecklistItem?.taskId === task.id &&
+                                                  listDraggingChecklistItem.itemId === item.id
+                                                  ? "opacity-55"
+                                                  : ""
+                                              )}
+                                              onDragOver={(event) => {
+                                                if (!isExpanded || listDraggingChecklistItem?.taskId !== task.id) {
+                                                  return;
+                                                }
+                                                event.preventDefault();
+                                              }}
+                                              onDrop={(event) => {
+                                                if (!isExpanded || listDraggingChecklistItem?.taskId !== task.id) {
+                                                  return;
+                                                }
+                                                event.preventDefault();
+                                                event.stopPropagation();
+
+                                                if (listDraggingChecklistItem.itemId === item.id) {
+                                                  setListDraggingChecklistItem(null);
+                                                  return;
+                                                }
+
+                                                const nextChecklist = reorderChecklistItems(
+                                                  task.checklist,
+                                                  listDraggingChecklistItem.itemId,
+                                                  item.id
+                                                );
+                                                if (nextChecklist !== task.checklist) {
+                                                  void handleUpdateTask(task.id, { checklist: nextChecklist });
+                                                }
+                                                setListDraggingChecklistItem(null);
+                                              }}
+                                            >
+                                              {isExpanded ? (
+                                                <button
+                                                  type="button"
+                                                  draggable
+                                                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 cursor-grab active:cursor-grabbing dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                  }}
+                                                  onDragStart={(event) => {
+                                                    event.stopPropagation();
+                                                    setListDraggingChecklistItem({
+                                                      taskId: task.id,
+                                                      itemId: item.id
+                                                    });
+                                                    event.dataTransfer.effectAllowed = "move";
+                                                    event.dataTransfer.setData("text/plain", item.id);
+                                                  }}
+                                                  onDragEnd={() => {
+                                                    setListDraggingChecklistItem(null);
+                                                  }}
+                                                  aria-label="Перемістити підзадачу"
+                                                  title="Перемістити підзадачу"
+                                                >
+                                                  <GripVertical size={14} />
+                                                </button>
+                                              ) : null}
                                               <button
                                                 type="button"
                                                 className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"

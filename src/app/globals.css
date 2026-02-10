@@ -450,6 +450,19 @@ html.theme-dark .border-slate-200 {
   border-color: rgba(71, 85, 105, 0.58) !important;
 }
 
+/* Keep dark task borders/hover visible despite base border !important overrides */
+html.theme-dark .dark\:border-slate-700 {
+  border-color: rgb(51 65 85) !important;
+}
+
+html.theme-dark .dark\:hover\:border-slate-500:hover {
+  border-color: rgb(100 116 139) !important;
+}
+
+html.theme-dark .dark\:hover\:border-slate-400:hover {
+  border-color: rgb(148 163 184) !important;
+}
+
 html.theme-dark .hover\:bg-slate-100:hover {
   background-color: rgba(30, 41, 59, 0.8) !important;
 }
