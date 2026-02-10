@@ -1243,6 +1243,20 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     ].filter((section) => section.items.length > 0);
   }, [sortedTasksForList]);
 
+  useEffect(() => {
+    if (viewMode !== "list") {
+      return;
+    }
+
+    if (taskListScope !== "completed") {
+      return;
+    }
+
+    if (sortedTasksForList.length === 0) {
+      setTaskListScope("active");
+    }
+  }, [sortedTasksForList.length, taskListScope, viewMode]);
+
   const moveManualTaskOrder = useCallback((draggedTaskId: string, targetTaskId: string): void => {
     if (draggedTaskId === targetTaskId) {
       return;
