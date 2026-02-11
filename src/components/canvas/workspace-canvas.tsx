@@ -101,9 +101,21 @@ const CARD_HEIGHT = 164;
 const BOARD_PADDING = 260;
 const DRAG_THRESHOLD_PX = 6;
 const ANCHOR_SIDES: AnchorSide[] = ["top", "right", "bottom", "left"];
-const MIN_ZOOM = 0.55;
+const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.85;
 const DEFAULT_CANVAS_TITLE = "Moddyland Operations Canvas";
+const MOBILE_CANVAS_DEFAULT_ZOOM = 0.5;
+const DESKTOP_CANVAS_DEFAULT_ZOOM = 1;
+
+const getDefaultCanvasZoom = (): number => {
+  if (typeof window === "undefined") {
+    return DESKTOP_CANVAS_DEFAULT_ZOOM;
+  }
+
+  return window.matchMedia("(max-width: 767px)").matches
+    ? MOBILE_CANVAS_DEFAULT_ZOOM
+    : DESKTOP_CANVAS_DEFAULT_ZOOM;
+};
 
 const blockTypeOptions: Array<{ value: BlockType; label: string; color: string }> = [
   { value: "website", label: "Вебсайт", color: "#0EA5E9" },
@@ -466,7 +478,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const listScrollTopRef = useRef(0);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
-  const zoomRef = useRef(1);
+  const zoomRef = useRef(getDefaultCanvasZoom());
   const pinchStateRef = useRef<{ distance: number; initialZoom: number } | null>(null);
   const gestureZoomStateRef = useRef<{ initialZoom: number } | null>(null);
   const dragStateRef = useRef<{
@@ -499,7 +511,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     height: number;
   } | null>(null);
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(getDefaultCanvasZoom);
   const [viewMode, setViewMode] = useState<WorkspaceViewMode>("list");
   const [taskListSortMode, setTaskListSortMode] = useState<TaskListSortMode>("default");
   const [showCompletedBySection, setShowCompletedBySection] = useState<{
@@ -993,7 +1005,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   );
 
   const resetZoom = useCallback((): void => {
-    applyZoomAtViewportCenter(1);
+    applyZoomAtViewportCenter(getDefaultCanvasZoom());
   }, [applyZoomAtViewportCenter]);
 
   useEffect(() => {
@@ -1450,6 +1462,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
   const dependencyTaskOptionsForList = useMemo(() => {
     return [...tasks]
+      .filter((item) => item.status !== "done")
       .map((item) => {
         const blockTitle = blocksById.get(item.blockId)?.title ?? "Блок";
         return {
@@ -2767,7 +2780,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
         <div className="pointer-events-none absolute inset-x-3 top-3 z-30 md:inset-x-4 md:top-4">
           <div className="pointer-events-auto relative flex items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 md:absolute md:left-1/2 md:-translate-x-1/2">
+            <div className="inline-flex overflow-hidden rounded-xl border border-slate-300 bg-white/95 shadow-sm backdrop-blur dark:border-slate-600 dark:bg-slate-900/95 md:absolute md:left-1/2 md:-translate-x-1/2">
               <button
                 type="button"
                 className={cn(
@@ -3148,7 +3161,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         edge.kind === "task_dependency"
                           ? resolvedTheme === "dark"
                             ? 0.78
-                            : 0.56
+                            : 0.72
                           : resolvedTheme === "dark"
                             ? 0.64
                             : edge.blocked
@@ -3171,7 +3184,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                       )}
                       stroke={
                         edge.kind === "task_dependency"
-                          ? flowTheme?.edgeCore ?? "#ede9fe"
+                          ? resolvedTheme === "dark"
+                            ? flowTheme?.edgeCore ?? "#ede9fe"
+                            : "#ffffff"
                           : edge.blocked
                           ? resolvedTheme === "dark"
                             ? "#fef3c7"
@@ -3180,8 +3195,16 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                             ? "#e0f2fe"
                             : "#ffffff"
                       }
-                      strokeWidth={1.1}
-                      strokeOpacity={edge.kind === "task_dependency" ? 0.95 : edge.blocked ? 0.97 : 0.98}
+                      strokeWidth={edge.kind === "task_dependency" ? (resolvedTheme === "dark" ? 1.1 : 1.3) : 1.1}
+                      strokeOpacity={
+                        edge.kind === "task_dependency"
+                          ? resolvedTheme === "dark"
+                            ? 0.95
+                            : 1
+                          : edge.blocked
+                            ? 0.97
+                            : 0.98
+                      }
                       strokeDasharray={edge.kind === "task_dependency" ? "8 40" : edge.blocked ? "8 40" : "8 40"}
                       strokeLinecap="round"
                     />
@@ -3397,13 +3420,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                           </div>
                         </div>
 
-                        {blockedMap[block.id] ? (
-                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900">
-                            <AlertTriangle size={12} />
-                            Є блокуючі залежності
-                          </div>
-                        ) : null}
-
                         <div className="space-y-0.5">
                           {blockTasksPreview.map((task) => {
                             const taskDueTone = getTaskDueTone(task);
@@ -3577,8 +3593,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                         viewMode === "flow" && typeof section.flowColorIndex === "number"
                           ? getFlowThemeColors(section.flowColorIndex, resolvedTheme)
                           : null;
+                      const shouldAutoShowCompleted =
+                        canToggleCompleted &&
+                        section.activeItems.length === 0 &&
+                        section.completedItems.length > 0;
                       const sectionCompletedVisible = canToggleCompleted
-                        ? showCompletedBySection[section.id as "mine" | "delegated"]
+                        ? showCompletedBySection[section.id as "mine" | "delegated"] ||
+                          shouldAutoShowCompleted
                         : false;
                       const visibleItems = sectionCompletedVisible
                         ? section.completedItems
@@ -3690,6 +3711,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               const taskDependencyOptions = dependencyTaskOptionsForList.filter(
                                 (candidate) => candidate.id !== task.id
                               );
+                              const hasCompletedDependency =
+                                Boolean(task.dependsOnTaskId) && dependencyTask?.status === "done";
+                              const hasActiveDependency =
+                                Boolean(task.dependsOnTaskId) &&
+                                dependencyTask !== null &&
+                                dependencyTask.status !== "done";
 
                               return (
                                 <div key={task.id}>
@@ -4239,6 +4266,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         isChecklistComposerOpen ? (
                                           <div className="mt-2 ml-3 flex gap-2">
                                             <input
+                                              autoFocus
                                               className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
                                               placeholder="Нова підзадача"
                                               value={checklistDraft}
@@ -4343,7 +4371,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
                                                 <select
                                                   className="soft-input px-2 py-1 text-xs"
-                                                  value={task.dependsOnTaskId ?? ""}
+                                                  value={hasActiveDependency ? task.dependsOnTaskId ?? "" : ""}
                                                   onClick={(event) => event.stopPropagation()}
                                                   onChange={(event) => {
                                                     const nextTaskId = event.target.value || null;
@@ -4357,6 +4385,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                     </option>
                                                   ))}
                                                 </select>
+                                                {hasCompletedDependency ? (
+                                                  <div className="sm:col-span-3 rounded-md border border-emerald-300/70 bg-emerald-50/80 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:border-emerald-500/45 dark:bg-emerald-900/35 dark:text-emerald-200">
+                                                    Попередня залежність уже виконана. Додай нову або очисти поле.
+                                                  </div>
+                                                ) : null}
                                                 <button
                                                   type="button"
                                                   className="soft-button inline-flex items-center justify-center px-2.5 py-1.5 text-sm font-semibold text-slate-600 sm:text-xs dark:text-slate-200"
@@ -4387,11 +4420,11 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               type="button"
                                               className={cn(
                                                 "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold transition duration-100 sm:text-xs",
-                                                task.dependsOnTaskId
+                                                hasActiveDependency
                                                   ? "text-violet-700 dark:text-violet-300"
                                                   : "text-sky-700 dark:text-sky-300",
                                                 canUseHoverInteractions
-                                                  ? task.dependsOnTaskId
+                                                  ? hasActiveDependency
                                                     ? "hover:text-violet-800 dark:hover:text-violet-200"
                                                     : "hover:text-sky-800 dark:hover:text-sky-200"
                                                   : ""
@@ -4404,13 +4437,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                 }));
                                               }}
                                               style={
-                                                task.dependsOnTaskId && flowTheme
+                                                hasActiveDependency && flowTheme
                                                   ? { color: flowTheme.edgeGlow }
                                                   : undefined
                                               }
                                             >
-                                              {task.dependsOnTaskId ? <Pencil size={12} /> : <Plus size={12} />}
-                                              {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
+                                              {hasActiveDependency ? <Pencil size={12} /> : <Plus size={12} />}
+                                              {hasActiveDependency ? "Змінити залежність" : "Додати залежність"}
                                             </button>
                                           )}
 

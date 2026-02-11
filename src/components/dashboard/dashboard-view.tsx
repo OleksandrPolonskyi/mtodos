@@ -320,9 +320,12 @@ export function DashboardView({ workspace }: DashboardViewProps): React.ReactEle
                 </p>
               </div>
               <div className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-900/35 dark:text-emerald-100">
-                План: {analytics.weeklyPlannedDone}/{analytics.weeklyPlanned}
+                Задачі тижня: {analytics.weeklyPlannedDone}/{analytics.weeklyPlanned}
               </div>
             </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Автоматично рахується по задачах із дедлайном у межах поточного тижня.
+            </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/70">
@@ -343,20 +346,24 @@ export function DashboardView({ workspace }: DashboardViewProps): React.ReactEle
               <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/70">
                 <div className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Темп плану</div>
                 <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
-                  {formatPercent(analytics.weeklyPlanRate)}
+                  {analytics.weeklyPlanned > 0 ? formatPercent(analytics.weeklyPlanRate) : "—"}
                 </div>
               </div>
             </div>
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-              {analytics.weeklyPlanLeft > 0 ? (
+              {analytics.weeklyPlanned === 0 ? (
+                <span>
+                  На цей тиждень ще немає задач із дедлайном. Додай дедлайни в межах тижня, щоб бачити темп.
+                </span>
+              ) : analytics.weeklyPlanLeft > 0 ? (
                 <span>
                   До завершення плану тижня лишилось <span className="font-semibold">{analytics.weeklyPlanLeft}</span> задач.
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 size={14} />
-                  План тижня закрито.
+                  Усі задачі цього тижня виконані.
                 </span>
               )}
             </div>

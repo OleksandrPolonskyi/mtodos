@@ -404,6 +404,7 @@ export function TaskDrawer({
   );
   const dependencyTaskOptions = useMemo(() => {
     return [...allTasks]
+      .filter((item) => item.status !== "done")
       .map((item) => {
         const blockTitle = blocksById.get(item.blockId)?.title ?? "Блок";
         return {
@@ -881,7 +882,9 @@ export function TaskDrawer({
           ) : null}
 
           {taskSections.map((section) => {
-            const sectionCompletedVisible = showCompletedBySection[section.id];
+            const shouldAutoShowCompleted =
+              section.activeTasks.length === 0 && section.completedTasks.length > 0;
+            const sectionCompletedVisible = showCompletedBySection[section.id] || shouldAutoShowCompleted;
             const visibleTasks = sectionCompletedVisible ? section.completedTasks : section.activeTasks;
             const hasCompleted = section.completedTasks.length > 0;
 
@@ -931,7 +934,13 @@ export function TaskDrawer({
             );
             const isBlockedByDependency = dependencyBlockedTaskIds.has(task.id);
             const computedStatus: TaskStatus = isBlockedByDependency ? "blocked" : task.status;
-            const isDependentTask = Boolean(task.dependsOnTaskId);
+            const hasCompletedDependency =
+              Boolean(task.dependsOnTaskId) && dependencyTask?.status === "done";
+            const hasActiveDependency =
+              Boolean(task.dependsOnTaskId) &&
+              dependencyTask !== null &&
+              dependencyTask.status !== "done";
+            const isDependentTask = hasActiveDependency;
             const isDependencySourceTask = dependencySourceTaskIds.has(task.id);
             const flowStep = taskFlowStepById.get(task.id) ?? null;
             const flowColorIndex = taskFlowColorIndexById.get(task.id);
@@ -942,7 +951,7 @@ export function TaskDrawer({
             const dependencyBlockedHintClass = isBlockedByDependency
               ? pickFlowBlockedHintClass(flowColorIndex)
               : null;
-            const dependencyActionClass = task.dependsOnTaskId
+            const dependencyActionClass = hasActiveDependency
               ? pickFlowDependencyActionClass(flowColorIndex)
               : null;
             const isDependencyFocusTarget = dependencyFocus?.taskId === task.id;
@@ -1439,6 +1448,7 @@ export function TaskDrawer({
                             isChecklistComposerOpen ? (
                               <div className="flex gap-2 pt-1">
                                 <input
+                                  autoFocus
                                   className="soft-input w-full px-2.5 py-2 text-base sm:text-sm"
                                   placeholder="Нова підзадача"
                                   value={checklistInput}
@@ -1524,7 +1534,7 @@ export function TaskDrawer({
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
                           <select
                             className="soft-input px-2 py-1 text-xs"
-                            value={task.dependsOnTaskId ?? ""}
+                            value={hasActiveDependency ? task.dependsOnTaskId ?? "" : ""}
                             onChange={async (event) => {
                               const nextTaskId = event.target.value || null;
                               await onUpdateTask(task.id, { dependsOnTaskId: nextTaskId });
@@ -1537,6 +1547,11 @@ export function TaskDrawer({
                               </option>
                             ))}
                           </select>
+                          {hasCompletedDependency ? (
+                            <div className="sm:col-span-3 rounded-md border border-emerald-300/70 bg-emerald-50/80 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:border-emerald-500/45 dark:bg-emerald-900/35 dark:text-emerald-200">
+                              Попередня залежність уже виконана. Додай нову або очисти поле.
+                            </div>
+                          ) : null}
 
                           <button
                             type="button"
@@ -1566,7 +1581,7 @@ export function TaskDrawer({
                         type="button"
                         className={cn(
                           "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold transition duration-100 sm:text-xs",
-                          task.dependsOnTaskId
+                          hasActiveDependency
                             ? dependencyActionClass ??
                                 "text-violet-700 hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200"
                             : "text-sky-700 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
@@ -1578,8 +1593,8 @@ export function TaskDrawer({
                           }));
                         }}
                       >
-                        {task.dependsOnTaskId ? <Pencil size={12} /> : <Plus size={12} />}
-                        {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
+                        {hasActiveDependency ? <Pencil size={12} /> : <Plus size={12} />}
+                        {hasActiveDependency ? "Змінити залежність" : "Додати залежність"}
                       </button>
                     )}
 
