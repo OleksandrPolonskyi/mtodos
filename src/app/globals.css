@@ -153,6 +153,14 @@ html.theme-dark .surface-panel {
   transition: border-color 110ms ease, box-shadow 110ms ease, background 110ms ease;
 }
 
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 select.soft-input {
   --select-arrow-offset: 10px;
   --select-arrow-color: rgba(71, 85, 105, 0.9);
@@ -296,6 +304,30 @@ html.theme-dark .primary-button:hover {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+@keyframes task-dependency-focus-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 var(--dependency-focus-shadow, rgba(139, 92, 246, 0)),
+      0 14px 28px -20px var(--dependency-focus-shadow, rgba(139, 92, 246, 0));
+  }
+
+  35% {
+    box-shadow:
+      0 0 0 4px var(--dependency-focus-shadow, rgba(139, 92, 246, 0.42)),
+      0 18px 34px -16px var(--dependency-focus-shadow, rgba(139, 92, 246, 0.35));
+  }
+
+  100% {
+    box-shadow:
+      0 0 0 10px rgba(0, 0, 0, 0),
+      0 14px 28px -20px rgba(0, 0, 0, 0);
+  }
+}
+
+.task-dependency-focus {
+  animation: task-dependency-focus-pulse 980ms cubic-bezier(0.22, 0.66, 0.24, 1) both;
 }
 
 @keyframes connector-flow-travel {
@@ -480,5 +512,9 @@ html.theme-dark .hover\:bg-sky-50\/70:hover {
   .progress-wave {
     animation: none;
     opacity: 0;
+  }
+
+  .task-dependency-focus {
+    animation: none;
   }
 }

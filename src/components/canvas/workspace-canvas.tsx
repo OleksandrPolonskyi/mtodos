@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react";
 import {
@@ -17,9 +18,11 @@ import {
   LayoutDashboard,
   Link2,
   ListTree,
+  Lock,
   Monitor,
   MoreHorizontal,
   Moon,
+  Pencil,
   Plus,
   RefreshCcw,
   Sparkles,
@@ -33,6 +36,11 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client";
 import { buildBlockedMap, buildTaskDependencyBlockedSet } from "@/lib/dashboard";
 import { publicEnv } from "@/lib/env";
+import {
+  pickFlowBlockedBadgeClass,
+  pickFlowBlockedHintClass,
+  pickFlowDependencyFocusShadow
+} from "@/lib/flow-accents";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import type {
   BlockEdge,
@@ -110,11 +118,12 @@ const blockTypeOptions: Array<{ value: BlockType; label: string; color: string }
 ];
 
 const openTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "blocked"]);
-type TaskDueTone = "normal" | "warning" | "overdue";
+type TaskDueTone = "normal" | "today" | "warning" | "overdue";
 
 interface TaskListViewItem {
   task: TaskItem;
   computedStatus: TaskStatus;
+  isDependencyBlocked: boolean;
   dueTone: TaskDueTone;
   block: BusinessBlock | null;
   dependencyTask: TaskItem | null;
@@ -398,6 +407,10 @@ const getTaskDueTone = (task: TaskItem): TaskDueTone => {
     return "overdue";
   }
 
+  if (task.dueDate === todayStr) {
+    return "today";
+  }
+
   if (task.dueDate <= warningBorderStr) {
     return "warning";
   }
@@ -416,6 +429,18 @@ const extractErrorMessage = (error: unknown): string => {
 const formatTaskDueDate = (dueDate: string | null): string => {
   if (!dueDate) {
     return "Без дати";
+  }
+
+  const today = new Date();
+  const todayStr = toLocalDateString(today);
+  if (dueDate === todayStr) {
+    return "Сьогодні";
+  }
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (dueDate === toLocalDateString(tomorrow)) {
+    return "Завтра";
   }
 
   const parsed = new Date(`${dueDate}T00:00:00`);
@@ -487,6 +512,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [taskListManualOrder, setTaskListManualOrder] = useState<string[]>([]);
   const [draggingTaskIdInList, setDraggingTaskIdInList] = useState<string | null>(null);
   const [expandedListTaskId, setExpandedListTaskId] = useState<string | null>(null);
+  const [listDependencyFocus, setListDependencyFocus] = useState<{
+    taskId: string;
+    shadowColor: string;
+  } | null>(null);
   const [listQuickEditor, setListQuickEditor] = useState<{
     taskId: string;
     type: "status" | "dueDate" | "ownership";
@@ -531,6 +560,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
   const [edgeTargetId, setEdgeTargetId] = useState("");
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const listDependencyFocusTimeoutRef = useRef<number | null>(null);
 
   const blocksById = useMemo(() => {
     return new Map(blocks.map((block) => [block.id, block]));
@@ -814,8 +844,42 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     if (viewMode !== "list") {
       setExpandedListTaskId(null);
       setListQuickEditor(null);
+      setListDependencyFocus(null);
     }
   }, [viewMode]);
+
+  const focusDependencyTaskInList = useCallback(
+    (taskId: string, flowColorIndex: number | undefined): void => {
+      const shadowColor =
+        pickFlowDependencyFocusShadow(flowColorIndex) ?? "rgba(139, 92, 246, 0.42)";
+      setListDependencyFocus({
+        taskId,
+        shadowColor
+      });
+
+      if (listDependencyFocusTimeoutRef.current !== null) {
+        window.clearTimeout(listDependencyFocusTimeoutRef.current);
+      }
+      listDependencyFocusTimeoutRef.current = window.setTimeout(() => {
+        setListDependencyFocus((current) => (current?.taskId === taskId ? null : current));
+        listDependencyFocusTimeoutRef.current = null;
+      }, 1050);
+
+      window.requestAnimationFrame(() => {
+        const target = document.querySelector<HTMLElement>(`[data-list-task-id='${taskId}']`);
+        target?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      if (listDependencyFocusTimeoutRef.current !== null) {
+        window.clearTimeout(listDependencyFocusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (viewMode !== "list") {
@@ -1302,6 +1366,25 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     return { chains: uniqueChains, taskEdgeStep, taskEdgeFlowIndex };
   }, [tasks]);
 
+  const taskFlowColorIndexById = useMemo(() => {
+    const colorMap = new Map<string, number>();
+
+    for (const [chainIndex, chain] of flowInsights.chains.entries()) {
+      if (chain.length < 2) {
+        continue;
+      }
+
+      for (const taskId of chain) {
+        const current = colorMap.get(taskId);
+        if (current === undefined || chainIndex < current) {
+          colorMap.set(taskId, chainIndex);
+        }
+      }
+    }
+
+    return colorMap;
+  }, [flowInsights.chains]);
+
   const flowChainsForList = useMemo(() => {
     const tasksById = new Map(tasks.map((task) => [task.id, task]));
 
@@ -1317,17 +1400,19 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
             const dependencyBlock = dependencyTask
               ? blocksById.get(dependencyTask.blockId) ?? null
               : null;
-            const computedStatus: TaskStatus = dependencyBlockedTaskIds.has(task.id)
-              ? "blocked"
-              : task.status;
+            const isDependencyBlocked = dependencyBlockedTaskIds.has(task.id);
+            const computedStatus: TaskStatus = isDependencyBlocked ? "blocked" : task.status;
+            const flowColorIndex = taskFlowColorIndexById.get(task.id) ?? chainIndex;
 
             return {
               task,
               computedStatus,
+              isDependencyBlocked,
               dueTone: getTaskDueTone(task),
               block: blocksById.get(task.blockId) ?? null,
               dependencyTask,
-              dependencyBlock
+              dependencyBlock,
+              flowColorIndex
             };
           })
           .filter((step) => step.block !== null);
@@ -1340,7 +1425,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       })
       .filter((flow) => flow.steps.length > 1)
       .sort((left, right) => right.steps.length - left.steps.length);
-  }, [blocksById, dependencyBlockedTaskIds, flowInsights.chains, tasks]);
+  }, [blocksById, dependencyBlockedTaskIds, flowInsights.chains, taskFlowColorIndexById, tasks]);
 
   const taskFlowStepById = useMemo(() => {
     const stepMap = new Map<string, number>();
@@ -1400,9 +1485,8 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
 
     const visible = tasks
       .map((task) => {
-        const computedStatus: TaskStatus = dependencyBlockedTaskIds.has(task.id)
-          ? "blocked"
-          : task.status;
+        const isDependencyBlocked = dependencyBlockedTaskIds.has(task.id);
+        const computedStatus: TaskStatus = isDependencyBlocked ? "blocked" : task.status;
 
         const dependencyTask = task.dependsOnTaskId
           ? tasksById.get(task.dependsOnTaskId) ?? null
@@ -1414,10 +1498,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
         return {
           task,
           computedStatus,
+          isDependencyBlocked,
           dueTone: getTaskDueTone(task),
           block: blocksById.get(task.blockId) ?? null,
           dependencyTask,
-          dependencyBlock
+          dependencyBlock,
+          flowColorIndex: taskFlowColorIndexById.get(task.id)
         };
       })
       .filter((item) => Boolean(item.block));
@@ -1447,7 +1533,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
     });
 
     return visible;
-  }, [blocksById, dependencyBlockedTaskIds, taskListManualOrder, taskListSortMode, tasks]);
+  }, [blocksById, dependencyBlockedTaskIds, taskFlowColorIndexById, taskListManualOrder, taskListSortMode, tasks]);
 
   const taskSectionsForList = useMemo<TaskListSection[]>(() => {
     const myTasks = sortedTasksForList.filter((item) => item.task.ownership === "mine");
@@ -1485,13 +1571,14 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
       activeItems: flow.steps.map((step, stepIndex) => ({
         task: step.task,
         computedStatus: step.computedStatus,
+        isDependencyBlocked: step.isDependencyBlocked,
         dueTone: step.dueTone,
         block: step.block,
         dependencyTask: step.dependencyTask,
         dependencyBlock: step.dependencyBlock,
         flowStep: stepIndex + 1,
         flowConnectorAfter: stepIndex < flow.steps.length - 1,
-        flowColorIndex: flow.flowColorIndex
+        flowColorIndex: step.flowColorIndex ?? flow.flowColorIndex
       })),
       completedItems: []
     }));
@@ -3335,8 +3422,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         : isDependencySourceTask
                                           ? "text-slate-700 hover:border-violet-300 dark:text-slate-200 dark:hover:border-violet-400/70"
                                           : taskDueTone === "overdue"
-                                            ? "text-slate-700 hover:border-rose-300 dark:text-slate-200 dark:hover:border-rose-400"
-                                            : taskDueTone === "warning"
+                                            ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
+                                            : taskDueTone === "today"
+                                              ? "text-slate-700 hover:border-emerald-300 dark:text-slate-200 dark:hover:border-emerald-400"
+                                              : taskDueTone === "warning"
                                               ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
                                             : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
                                       : "text-slate-700 dark:text-slate-200",
@@ -3390,8 +3479,10 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         ? "line-through text-slate-500 dark:text-slate-400"
                                         : "",
                                       taskDueTone === "overdue"
-                                        ? "text-rose-700 dark:text-rose-300"
-                                        : taskDueTone === "warning"
+                                        ? "text-amber-700 dark:text-amber-300"
+                                        : taskDueTone === "today"
+                                          ? "text-emerald-700 dark:text-emerald-300"
+                                          : taskDueTone === "warning"
                                           ? "text-amber-700 dark:text-amber-300"
                                           : ""
                                     )}
@@ -3545,6 +3636,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                               task,
                               block,
                               computedStatus,
+                              isDependencyBlocked,
                               dueTone,
                               dependencyTask,
                               dependencyBlock,
@@ -3579,6 +3671,22 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 typeof flowColorIndex === "number"
                                   ? getFlowThemeColors(flowColorIndex, resolvedTheme)
                                   : null;
+                              const dependencyBlockedBadgeClass =
+                                computedStatus === "blocked" && isDependencyBlocked
+                                  ? pickFlowBlockedBadgeClass(flowColorIndex)
+                                  : null;
+                              const dependencyBlockedHintClass = isDependencyBlocked
+                                ? pickFlowBlockedHintClass(flowColorIndex)
+                                : null;
+                              const isDependencyFocusTarget =
+                                listDependencyFocus?.taskId === task.id;
+                              const dependencyFocusStyle: CSSProperties | undefined =
+                                isDependencyFocusTarget
+                                  ? ({
+                                      "--dependency-focus-shadow":
+                                        listDependencyFocus.shadowColor
+                                    } as CSSProperties)
+                                  : undefined;
                               const taskDependencyOptions = dependencyTaskOptionsForList.filter(
                                 (candidate) => candidate.id !== task.id
                               );
@@ -3587,6 +3695,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                 <div key={task.id}>
                                 <article
                                   data-list-task-item="true"
+                                  data-list-task-id={task.id}
                                   draggable={viewMode !== "flow" && taskListSortMode === "custom"}
                                   onDragStart={() => {
                                     if (viewMode === "flow" || taskListSortMode !== "custom") {
@@ -3613,6 +3722,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                   }
                                 className={cn(
                                   "group relative overflow-visible w-full rounded-2xl border bg-white px-4 py-3 transition",
+                                  isDependencyFocusTarget ? "task-dependency-focus" : "",
                                   viewMode !== "flow" && taskListSortMode === "custom"
                                     ? "cursor-grab active:cursor-grabbing"
                                     : "",
@@ -3623,8 +3733,12 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                       : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
                                     : dueTone === "overdue"
                                       ? canUseHoverInteractions
-                                        ? "border-rose-200 bg-rose-100 hover:border-rose-300 dark:border-rose-500/55 dark:bg-rose-950 dark:hover:border-rose-400"
-                                        : "border-rose-200 bg-rose-100 dark:border-rose-500/55 dark:bg-rose-950"
+                                        ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
+                                        : "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
+                                      : dueTone === "today"
+                                        ? canUseHoverInteractions
+                                          ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
+                                          : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
                                       : dueTone === "warning"
                                         ? canUseHoverInteractions
                                           ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
@@ -3633,27 +3747,40 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
                                           : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
                                 )}
+                                style={dependencyFocusStyle}
                               >
                                   <div className="flex items-start gap-2.5">
                                     <div className="mt-0.5 flex shrink-0 flex-col items-center gap-1">
                                       <button
                                         type="button"
+                                        disabled={isDependencyBlocked}
                                         className={cn(
                                           "inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                                          isDependencyBlocked ? "cursor-not-allowed opacity-45" : "",
                                           canUseHoverInteractions
                                             ? "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-300"
                                             : ""
                                         )}
                                         onClick={(event) => {
                                           event.stopPropagation();
+                                          if (isDependencyBlocked) {
+                                            return;
+                                          }
                                           void handleUpdateTask(task.id, {
                                             status: task.status === "done" ? "todo" : "done"
                                           });
                                         }}
                                         aria-label={
-                                          task.status === "done"
+                                          isDependencyBlocked
+                                            ? "Задача заблокована залежністю"
+                                            : task.status === "done"
                                             ? "Позначити як не виконано"
                                             : "Позначити як виконано"
+                                        }
+                                        title={
+                                          isDependencyBlocked
+                                            ? "Поки задача заблокована залежністю, її не можна завершити"
+                                            : undefined
                                         }
                                       >
                                         {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
@@ -3682,7 +3809,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           task.status === "done"
                                             ? "text-slate-500 line-through dark:text-slate-400"
                                             : dueTone === "overdue"
-                                              ? "text-rose-700 dark:text-rose-300"
+                                              ? "text-amber-700 dark:text-amber-300"
                                               : dueTone === "warning"
                                                 ? "text-amber-700 dark:text-amber-300"
                                                 : "text-slate-900 dark:text-slate-100"
@@ -3695,7 +3822,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               task.status === "done"
                                                 ? "text-slate-500 line-through dark:text-slate-400"
                                                 : dueTone === "overdue"
-                                                  ? "text-rose-700 dark:text-rose-300"
+                                                  ? "text-amber-700 dark:text-amber-300"
                                                   : dueTone === "warning"
                                                     ? "text-amber-700 dark:text-amber-300"
                                                     : "text-slate-900 dark:text-slate-100"
@@ -3736,7 +3863,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               task.status === "done"
                                                 ? "text-slate-500 line-through dark:text-slate-400"
                                                 : dueTone === "overdue"
-                                                  ? "text-rose-700 dark:text-rose-300"
+                                                  ? "text-amber-700 dark:text-amber-300"
                                                   : dueTone === "warning"
                                                     ? "text-amber-700 dark:text-amber-300"
                                                     : "text-slate-900 dark:text-slate-100"
@@ -3752,8 +3879,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             type="button"
                                             className={cn(
                                               "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs sm:text-sm font-bold uppercase tracking-[0.07em] leading-none transition duration-100",
+                                              isDependencyBlocked && dependencyTask ? "pr-8" : "",
                                               canUseHoverInteractions ? "hover:brightness-95" : "",
-                                              taskStatusBadgeClasses[computedStatus]
+                                              dependencyBlockedBadgeClass ?? taskStatusBadgeClasses[computedStatus]
                                             )}
                                             onClick={(event) => {
                                               event.stopPropagation();
@@ -3766,6 +3894,28 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           >
                                             {taskStatusLabel[computedStatus]}
                                           </button>
+                                          {isDependencyBlocked && dependencyTask ? (
+                                            <button
+                                              type="button"
+                                              data-list-task-no-toggle="true"
+                                              className={cn(
+                                                "absolute right-1 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-black/15 bg-white/30 text-current transition",
+                                                canUseHoverInteractions ? "hover:bg-white/45" : "",
+                                                "dark:border-white/20 dark:bg-black/15 dark:hover:bg-black/30"
+                                              )}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                focusDependencyTaskInList(
+                                                  dependencyTask.id,
+                                                  flowColorIndex
+                                                );
+                                              }}
+                                              aria-label="Підсвітити блокуючу задачу"
+                                              title="Підсвітити блокуючу задачу"
+                                            >
+                                              <Lock size={11} />
+                                            </button>
+                                          ) : null}
                                           {isStatusEditorOpen ? (
                                             <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                                               {taskStatusOptions.map((option) => (
@@ -3799,7 +3949,9 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                               "inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 py-1 text-xs sm:text-sm font-semibold leading-none transition duration-100",
                                               canUseHoverInteractions ? "hover:brightness-95" : "",
                                               dueTone === "overdue"
-                                                ? "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
+                                                ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
+                                                : dueTone === "today"
+                                                  ? "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-900/55 dark:text-emerald-100"
                                                 : dueTone === "warning"
                                                   ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
                                                   : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
@@ -4156,16 +4308,33 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                           </button>
                                         )
                                       ) : null}
-                                      {computedStatus === "blocked" && dependencyTask ? (
-                                        <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900">
-                                          <AlertTriangle size={12} />
-                                          <span className="truncate">
-                                            Блокує: {dependencyBlock?.title ?? "Блок"} / {dependencyTask.title}
-                                          </span>
-                                        </div>
-                                      ) : null}
                                       {isExpanded ? (
                                         <div className="mt-3 border-t border-slate-200/70 pt-3 dark:border-slate-700/70">
+                                          {isDependencyBlocked && dependencyTask ? (
+                                            <button
+                                              type="button"
+                                              data-list-task-no-toggle="true"
+                                              className={cn(
+                                                "mb-3 inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] sm:text-xs font-semibold transition duration-100",
+                                                canUseHoverInteractions ? "hover:brightness-95" : "",
+                                                dependencyBlockedHintClass ??
+                                                  "border border-amber-300 bg-amber-100/85 text-amber-900"
+                                              )}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                focusDependencyTaskInList(
+                                                  dependencyTask.id,
+                                                  flowColorIndex
+                                                );
+                                              }}
+                                            >
+                                              <AlertTriangle size={12} />
+                                              <span className="truncate">
+                                                Очікує виконання: {dependencyBlock?.title ?? "Блок"} /{" "}
+                                                {dependencyTask.title}
+                                              </span>
+                                            </button>
+                                          ) : null}
                                           {isDependencyEditorOpen ? (
                                             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-700 dark:bg-slate-900/85">
                                               <div className="mb-2 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300">
@@ -4217,8 +4386,15 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             <button
                                               type="button"
                                               className={cn(
-                                                "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300",
-                                                canUseHoverInteractions ? "hover:text-sky-800 dark:hover:text-sky-200" : ""
+                                                "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold transition duration-100 sm:text-xs",
+                                                task.dependsOnTaskId
+                                                  ? "text-violet-700 dark:text-violet-300"
+                                                  : "text-sky-700 dark:text-sky-300",
+                                                canUseHoverInteractions
+                                                  ? task.dependsOnTaskId
+                                                    ? "hover:text-violet-800 dark:hover:text-violet-200"
+                                                    : "hover:text-sky-800 dark:hover:text-sky-200"
+                                                  : ""
                                               )}
                                               onClick={(event) => {
                                                 event.stopPropagation();
@@ -4227,8 +4403,13 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                   [task.id]: true
                                                 }));
                                               }}
+                                              style={
+                                                task.dependsOnTaskId && flowTheme
+                                                  ? { color: flowTheme.edgeGlow }
+                                                  : undefined
+                                              }
                                             >
-                                              <Plus size={12} />
+                                              {task.dependsOnTaskId ? <Pencil size={12} /> : <Plus size={12} />}
                                               {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
                                             </button>
                                           )}
@@ -4661,6 +4842,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
               tasks={selectedBlockTasks}
               allTasks={tasks}
               taskFlowStepById={taskFlowStepById}
+              taskFlowColorIndexById={taskFlowColorIndexById}
               autoStartCreateToken={taskDrawerCreateToken}
               autoStartCreateBlockId={taskDrawerCreateBlockId}
               dependencyBlockedTaskIds={dependencyBlockedTaskIds}

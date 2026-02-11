@@ -31,7 +31,7 @@ export const buildBlockedMap = (
 
 export const buildTaskDependencyBlockedSet = (
   tasks: TaskItem[],
-  timezone: string
+  _timezone: string
 ): Set<string> => {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const blockedTaskIds = new Set<string>();
@@ -50,11 +50,7 @@ export const buildTaskDependencyBlockedSet = (
       continue;
     }
 
-    if (!isOpenTask(prerequisite.status)) {
-      continue;
-    }
-
-    if (!isDateOverdue(prerequisite.dueDate, timezone)) {
+    if (prerequisite.status === "done") {
       continue;
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -11,6 +11,8 @@ import {
   Circle,
   ClipboardList,
   GripVertical,
+  Lock,
+  Pencil,
   Plus,
   Trash2,
   X
@@ -26,6 +28,12 @@ import {
   getBlockIconOption,
   resolveBlockIconName
 } from "@/lib/block-icons";
+import {
+  pickFlowBlockedBadgeClass,
+  pickFlowBlockedHintClass,
+  pickFlowDependencyActionClass,
+  pickFlowDependencyFocusShadow
+} from "@/lib/flow-accents";
 import { PomodoroTag } from "@/components/tasks/pomodoro-tag";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +48,7 @@ interface TaskDrawerProps {
   tasks: TaskItem[];
   allTasks: TaskItem[];
   taskFlowStepById: ReadonlyMap<string, number>;
+  taskFlowColorIndexById: ReadonlyMap<string, number>;
   autoStartCreateToken?: number;
   autoStartCreateBlockId?: string | null;
   dependencyBlockedTaskIds: ReadonlySet<string>;
@@ -96,6 +105,18 @@ const formatDueDate = (dueDate: string | null): string => {
     return "Без дати";
   }
 
+  const today = new Date();
+  const todayStr = toLocalDateString(today);
+  if (dueDate === todayStr) {
+    return "Сьогодні";
+  }
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (dueDate === toLocalDateString(tomorrow)) {
+    return "Завтра";
+  }
+
   const parsed = new Date(`${dueDate}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) {
     return dueDate;
@@ -107,7 +128,7 @@ const formatDueDate = (dueDate: string | null): string => {
   }).format(parsed);
 };
 
-type DueDateTone = "normal" | "warning" | "overdue";
+type DueDateTone = "normal" | "today" | "warning" | "overdue";
 
 const toLocalDateString = (date: Date): string => {
   const year = date.getFullYear();
@@ -192,6 +213,10 @@ const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone
     return "overdue";
   }
 
+  if (dueDate === todayStr) {
+    return "today";
+  }
+
   if (dueDate <= warningBorderStr) {
     return "warning";
   }
@@ -201,14 +226,16 @@ const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone
 
 const dueDateTagClasses: Record<DueDateTone, string> = {
   normal: "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200",
+  today: "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-900/55 dark:text-emerald-100",
   warning: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100",
-  overdue: "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/55 dark:bg-rose-900/50 dark:text-rose-100"
+  overdue: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
 };
 
 const taskTitleToneClasses: Record<DueDateTone, string> = {
   normal: "text-slate-900 dark:text-slate-100",
+  today: "text-slate-900 dark:text-slate-100",
   warning: "text-slate-900 dark:text-slate-100",
-  overdue: "text-rose-700 dark:text-rose-300"
+  overdue: "text-amber-700 dark:text-amber-300"
 };
 
 export function TaskDrawer({
@@ -217,6 +244,7 @@ export function TaskDrawer({
   tasks,
   allTasks,
   taskFlowStepById,
+  taskFlowColorIndexById,
   autoStartCreateToken = 0,
   autoStartCreateBlockId = null,
   dependencyBlockedTaskIds,
@@ -244,6 +272,17 @@ export function TaskDrawer({
   const [newTaskTitleDraft, setNewTaskTitleDraft] = useState("");
   const [taskIdToFocus, setTaskIdToFocus] = useState<string | null>(null);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [dependencyFocus, setDependencyFocus] = useState<{
+    taskId: string;
+    shadowColor: string;
+  } | null>(null);
+  const [showCompletedBySection, setShowCompletedBySection] = useState<{
+    mine: boolean;
+    delegated: boolean;
+  }>({
+    mine: false,
+    delegated: false
+  });
   const [quickEditor, setQuickEditor] = useState<{
     taskId: string;
     type: "status" | "dueDate" | "ownership";
@@ -255,6 +294,7 @@ export function TaskDrawer({
   const iconPickerRef = useRef<HTMLDivElement | null>(null);
   const newTaskInputRef = useRef<HTMLInputElement | null>(null);
   const previousAutoStartTokenRef = useRef<number>(-1);
+  const dependencyFocusTimeoutRef = useRef<number | null>(null);
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -283,10 +323,73 @@ export function TaskDrawer({
     return sortedTasks.filter((task) => task.ownership === "delegated");
   }, [sortedTasks]);
 
-  const groupedTasks = useMemo(() => {
-    return [...ownTasks, ...delegatedTasks];
-  }, [delegatedTasks, ownTasks]);
-  const firstDelegatedTaskId = delegatedTasks[0]?.id ?? null;
+  const ownActiveTasks = useMemo(() => {
+    return ownTasks.filter((task) => task.status !== "done");
+  }, [ownTasks]);
+
+  const ownCompletedTasks = useMemo(() => {
+    return ownTasks.filter((task) => task.status === "done");
+  }, [ownTasks]);
+
+  const delegatedActiveTasks = useMemo(() => {
+    return delegatedTasks.filter((task) => task.status !== "done");
+  }, [delegatedTasks]);
+
+  const delegatedCompletedTasks = useMemo(() => {
+    return delegatedTasks.filter((task) => task.status === "done");
+  }, [delegatedTasks]);
+
+  const taskSections = useMemo(() => {
+    const sections: Array<{
+      id: "mine" | "delegated";
+      title: string;
+      activeTasks: TaskItem[];
+      completedTasks: TaskItem[];
+    }> = [
+      {
+        id: "mine",
+        title: "Мої задачі",
+        activeTasks: ownActiveTasks,
+        completedTasks: ownCompletedTasks
+      }
+    ];
+
+    if (delegatedTasks.length > 0) {
+      sections.push({
+        id: "delegated",
+        title: "Делеговано",
+        activeTasks: delegatedActiveTasks,
+        completedTasks: delegatedCompletedTasks
+      });
+    }
+
+    return sections;
+  }, [
+    delegatedActiveTasks,
+    delegatedCompletedTasks,
+    delegatedTasks.length,
+    ownActiveTasks,
+    ownCompletedTasks
+  ]);
+
+  useEffect(() => {
+    setShowCompletedBySection((previous) => {
+      let hasChanges = false;
+      const next = { ...previous };
+
+      if (previous.mine && ownCompletedTasks.length === 0) {
+        next.mine = false;
+        hasChanges = true;
+      }
+
+      if (previous.delegated && delegatedCompletedTasks.length === 0) {
+        next.delegated = false;
+        hasChanges = true;
+      }
+
+      return hasChanges ? next : previous;
+    });
+  }, [delegatedCompletedTasks.length, ownCompletedTasks.length]);
 
   const blocksById = useMemo(() => new Map(blocks.map((item) => [item.id, item])), [blocks]);
   const allTasksById = useMemo(() => new Map(allTasks.map((item) => [item.id, item])), [allTasks]);
@@ -320,6 +423,31 @@ export function TaskDrawer({
       });
   }, [allTasks, blocksById]);
 
+  const focusDependencyTaskInDrawer = useCallback(
+    (taskId: string, flowColorIndex: number | undefined): void => {
+      const shadowColor =
+        pickFlowDependencyFocusShadow(flowColorIndex) ?? "rgba(139, 92, 246, 0.42)";
+      setDependencyFocus({
+        taskId,
+        shadowColor
+      });
+
+      if (dependencyFocusTimeoutRef.current !== null) {
+        window.clearTimeout(dependencyFocusTimeoutRef.current);
+      }
+      dependencyFocusTimeoutRef.current = window.setTimeout(() => {
+        setDependencyFocus((current) => (current?.taskId === taskId ? null : current));
+        dependencyFocusTimeoutRef.current = null;
+      }, 1050);
+
+      window.requestAnimationFrame(() => {
+        const target = document.querySelector<HTMLElement>(`[data-task-id='${taskId}']`);
+        target?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     setBlockTitleDraft(block?.title ?? "");
   }, [block?.id, block?.title]);
@@ -335,6 +463,11 @@ export function TaskDrawer({
     setDependencyEditorOpenByTask({});
     setIsCreateFormOpen(false);
     setNewTaskTitleDraft("");
+    setDependencyFocus(null);
+    setShowCompletedBySection({
+      mine: false,
+      delegated: false
+    });
   }, [block?.id]);
 
   useEffect(() => {
@@ -373,7 +506,15 @@ export function TaskDrawer({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [groupedTasks, taskIdToFocus]);
+  }, [sortedTasks, taskIdToFocus]);
+
+  useEffect(() => {
+    return () => {
+      if (dependencyFocusTimeoutRef.current !== null) {
+        window.clearTimeout(dependencyFocusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isIconPickerOpen) {
@@ -644,9 +785,19 @@ export function TaskDrawer({
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
+            className="soft-button inline-flex h-9 w-9 items-center justify-center border-destructive text-destructive"
+            onClick={() => onArchiveBlock(block.id)}
+            aria-label="Архівувати"
+            title="Архівувати"
+          >
+            <Archive size={14} />
+          </button>
+          <span className="h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
+          <button
+            type="button"
             disabled={creatingTask}
             className={cn(
-              "soft-button inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-semibold leading-none text-slate-700 dark:text-slate-100",
+              "soft-button inline-flex h-9 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-semibold leading-none text-slate-700 dark:text-slate-100",
               "disabled:cursor-not-allowed disabled:opacity-60"
             )}
             onClick={() => setIsCreateFormOpen(true)}
@@ -663,25 +814,10 @@ export function TaskDrawer({
           >
             <X size={14} />
           </button>
-          <button
-            type="button"
-            className="soft-button inline-flex h-9 w-9 items-center justify-center border-destructive text-destructive"
-            onClick={() => onArchiveBlock(block.id)}
-            aria-label="Архівувати"
-            title="Архівувати"
-          >
-            <Archive size={14} />
-          </button>
         </div>
       </div>
 
       <section>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            Список задач
-          </div>
-        </div>
-
         <div className="space-y-3">
           {isCreateFormOpen ? (
             <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-2 dark:border-sky-500/55 dark:bg-sky-950/55">
@@ -729,7 +865,7 @@ export function TaskDrawer({
             </div>
           ) : null}
 
-          {ownTasks.length === 0 ? (
+          {sortedTasks.length === 0 ? (
             <button
               type="button"
               disabled={creatingTask}
@@ -744,7 +880,35 @@ export function TaskDrawer({
             </button>
           ) : null}
 
-          {groupedTasks.map((task) => {
+          {taskSections.map((section) => {
+            const sectionCompletedVisible = showCompletedBySection[section.id];
+            const visibleTasks = sectionCompletedVisible ? section.completedTasks : section.activeTasks;
+            const hasCompleted = section.completedTasks.length > 0;
+
+            return (
+              <section key={section.id} className="space-y-2">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {section.title}
+                  </div>
+                  {hasCompleted ? (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-sky-700 transition hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
+                      onClick={() => {
+                        setShowCompletedBySection((prev) => ({
+                          ...prev,
+                          [section.id]: !prev[section.id]
+                        }));
+                      }}
+                    >
+                      {sectionCompletedVisible ? "Сховати" : "Показати"}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+          {visibleTasks.map((task) => {
             const globalIndex = sortedTasks.findIndex((entry) => entry.id === task.id);
             const draftTitle = editingTitleByTask[task.id] ?? task.title;
             const checklistInput = checklistDraft[task.id] ?? "";
@@ -766,28 +930,44 @@ export function TaskDrawer({
               (candidate) => candidate.id !== task.id
             );
             const isBlockedByDependency = dependencyBlockedTaskIds.has(task.id);
+            const computedStatus: TaskStatus = isBlockedByDependency ? "blocked" : task.status;
             const isDependentTask = Boolean(task.dependsOnTaskId);
             const isDependencySourceTask = dependencySourceTaskIds.has(task.id);
             const flowStep = taskFlowStepById.get(task.id) ?? null;
+            const flowColorIndex = taskFlowColorIndexById.get(task.id);
+            const dependencyBlockedBadgeClass =
+              computedStatus === "blocked" && isBlockedByDependency
+                ? pickFlowBlockedBadgeClass(flowColorIndex)
+                : null;
+            const dependencyBlockedHintClass = isBlockedByDependency
+              ? pickFlowBlockedHintClass(flowColorIndex)
+              : null;
+            const dependencyActionClass = task.dependsOnTaskId
+              ? pickFlowDependencyActionClass(flowColorIndex)
+              : null;
+            const isDependencyFocusTarget = dependencyFocus?.taskId === task.id;
+            const dependencyFocusStyle: CSSProperties | undefined =
+              isDependencyFocusTarget
+                ? ({
+                    "--dependency-focus-shadow": dependencyFocus.shadowColor
+                  } as CSSProperties)
+                : undefined;
 
             return (
               <div key={task.id}>
-                {task.id === firstDelegatedTaskId ? (
-                  <div className="mb-2 pt-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Делеговано
-                  </div>
-                ) : null}
                 <article
                   data-task-item="true"
                   data-task-id={task.id}
                   className={cn(
                     "relative overflow-visible rounded-xl border bg-white p-3 transition-colors duration-100 dark:bg-slate-900/92",
+                    isDependencyFocusTarget ? "task-dependency-focus" : "",
                     isDependentTask
                       ? "border-violet-300 hover:border-violet-400 dark:border-violet-500/70 dark:hover:border-violet-400/80"
                       : isDependencySourceTask
                         ? "border-violet-200 hover:border-violet-300 dark:border-violet-500/45 dark:hover:border-violet-400/70"
                         : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-500"
                   )}
+                  style={dependencyFocusStyle}
                   onClick={(event) => {
                     if (shouldIgnoreTaskContainerToggle(event.target)) {
                       return;
@@ -799,12 +979,33 @@ export function TaskDrawer({
                   <div className="flex items-start gap-2">
                   <button
                     type="button"
-                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 hover:border-sky-300 hover:text-sky-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500 dark:hover:text-sky-200"
+                    disabled={isBlockedByDependency}
+                    className={cn(
+                      "mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition duration-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+                      isBlockedByDependency
+                        ? "cursor-not-allowed opacity-45"
+                        : "hover:border-sky-300 hover:text-sky-700 dark:hover:border-sky-500 dark:hover:text-sky-200"
+                    )}
                     onClick={async () => {
+                      if (isBlockedByDependency) {
+                        return;
+                      }
                       await onUpdateTask(task.id, {
                         status: task.status === "done" ? "todo" : "done"
                       });
                     }}
+                    aria-label={
+                      isBlockedByDependency
+                        ? "Задача заблокована залежністю"
+                        : task.status === "done"
+                          ? "Позначити як не виконано"
+                          : "Позначити як виконано"
+                    }
+                    title={
+                      isBlockedByDependency
+                        ? "Поки задача заблокована залежністю, її не можна завершити"
+                        : undefined
+                    }
                   >
                     {task.status === "done" ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                   </button>
@@ -875,7 +1076,8 @@ export function TaskDrawer({
                           type="button"
                           className={cn(
                             "inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs sm:text-sm font-bold uppercase tracking-[0.07em] leading-none transition duration-100 hover:brightness-95",
-                            statusBadgeClasses[task.status]
+                            isBlockedByDependency && dependencyTask ? "pr-8" : "",
+                            dependencyBlockedBadgeClass ?? statusBadgeClasses[computedStatus]
                           )}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -886,8 +1088,23 @@ export function TaskDrawer({
                             );
                           }}
                         >
-                          {statusLabelMap[task.status]}
+                          {statusLabelMap[computedStatus]}
                         </button>
+                        {isBlockedByDependency && dependencyTask ? (
+                          <button
+                            type="button"
+                            data-task-no-toggle="true"
+                            className="absolute right-1 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-black/15 bg-white/30 text-current transition hover:bg-white/45 dark:border-white/20 dark:bg-black/15 dark:hover:bg-black/30"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              focusDependencyTaskInDrawer(dependencyTask.id, flowColorIndex);
+                            }}
+                            aria-label="Підсвітити блокуючу задачу"
+                            title="Підсвітити блокуючу задачу"
+                          >
+                            <Lock size={11} />
+                          </button>
+                        ) : null}
                         {isStatusEditorOpen ? (
                           <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                             {statusOptions.map((option) => (
@@ -1030,13 +1247,25 @@ export function TaskDrawer({
 
                     </div>
 
-                    {isBlockedByDependency && dependencyTask ? (
-                      <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-300 bg-amber-100/85 px-2 py-1 text-[11px] sm:text-xs font-semibold text-amber-900 dark:border-amber-500/50 dark:bg-amber-900/50 dark:text-amber-100">
+                    {isExpanded && isBlockedByDependency && dependencyTask ? (
+                      <button
+                        type="button"
+                        data-task-no-toggle="true"
+                        className={cn(
+                          "mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] sm:text-xs font-semibold transition duration-100 hover:brightness-95",
+                          dependencyBlockedHintClass ??
+                            "border border-amber-300 bg-amber-100/85 text-amber-900 dark:border-amber-500/50 dark:bg-amber-900/50 dark:text-amber-100"
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          focusDependencyTaskInDrawer(dependencyTask.id, flowColorIndex);
+                        }}
+                      >
                         <AlertTriangle size={12} />
                         <span className="truncate">
-                          Блокує прострочена задача: {dependencyTask.title}
+                          Очікує виконання задачі: {dependencyTask.title}
                         </span>
-                      </div>
+                      </button>
                     ) : null}
 
                     {showChecklistSection ? (
@@ -1335,7 +1564,13 @@ export function TaskDrawer({
                     ) : (
                       <button
                         type="button"
-                        className="mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold text-sky-700 transition duration-100 sm:text-xs dark:text-sky-300"
+                        className={cn(
+                          "mb-3 inline-flex items-center gap-2 rounded-md px-1 py-1 text-sm font-semibold transition duration-100 sm:text-xs",
+                          task.dependsOnTaskId
+                            ? dependencyActionClass ??
+                                "text-violet-700 hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200"
+                            : "text-sky-700 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-200"
+                        )}
                         onClick={() => {
                           setDependencyEditorOpenByTask((prev) => ({
                             ...prev,
@@ -1343,7 +1578,7 @@ export function TaskDrawer({
                           }));
                         }}
                       >
-                        <Plus size={12} />
+                        {task.dependsOnTaskId ? <Pencil size={12} /> : <Plus size={12} />}
                         {task.dependsOnTaskId ? "Змінити залежність" : "Додати залежність"}
                       </button>
                     )}
@@ -1380,6 +1615,10 @@ export function TaskDrawer({
                   ) : null}
                 </article>
               </div>
+            );
+          })}
+                </div>
+              </section>
             );
           })}
         </div>
