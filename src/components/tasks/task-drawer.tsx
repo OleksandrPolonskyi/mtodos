@@ -128,7 +128,7 @@ const formatDueDate = (dueDate: string | null): string => {
   }).format(parsed);
 };
 
-type DueDateTone = "normal" | "today" | "warning" | "overdue";
+type DueDateTone = "normal" | "today" | "overdue";
 
 const toLocalDateString = (date: Date): string => {
   const year = date.getFullYear();
@@ -205,9 +205,6 @@ const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone
 
   const today = new Date();
   const todayStr = toLocalDateString(today);
-  const warningBorder = new Date(today);
-  warningBorder.setDate(today.getDate() + 1);
-  const warningBorderStr = toLocalDateString(warningBorder);
 
   if (dueDate < todayStr) {
     return "overdue";
@@ -217,24 +214,18 @@ const getDueDateTone = (dueDate: string | null, status: TaskStatus): DueDateTone
     return "today";
   }
 
-  if (dueDate <= warningBorderStr) {
-    return "warning";
-  }
-
   return "normal";
 };
 
 const dueDateTagClasses: Record<DueDateTone, string> = {
   normal: "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200",
   today: "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-900/55 dark:text-emerald-100",
-  warning: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100",
   overdue: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
 };
 
 const taskTitleToneClasses: Record<DueDateTone, string> = {
   normal: "text-slate-900 dark:text-slate-100",
   today: "text-slate-900 dark:text-slate-100",
-  warning: "text-slate-900 dark:text-slate-100",
   overdue: "text-amber-700 dark:text-amber-300"
 };
 

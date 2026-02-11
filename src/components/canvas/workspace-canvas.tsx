@@ -130,7 +130,7 @@ const blockTypeOptions: Array<{ value: BlockType; label: string; color: string }
 ];
 
 const openTaskStatuses = new Set<TaskStatus>(["todo", "in_progress", "blocked"]);
-type TaskDueTone = "normal" | "today" | "warning" | "overdue";
+type TaskDueTone = "normal" | "today" | "overdue";
 
 interface TaskListViewItem {
   task: TaskItem;
@@ -411,9 +411,6 @@ const getTaskDueTone = (task: TaskItem): TaskDueTone => {
 
   const today = new Date();
   const todayStr = toLocalDateString(today);
-  const warningBorder = new Date(today);
-  warningBorder.setDate(today.getDate() + 1);
-  const warningBorderStr = toLocalDateString(warningBorder);
 
   if (task.dueDate < todayStr) {
     return "overdue";
@@ -421,10 +418,6 @@ const getTaskDueTone = (task: TaskItem): TaskDueTone => {
 
   if (task.dueDate === todayStr) {
     return "today";
-  }
-
-  if (task.dueDate <= warningBorderStr) {
-    return "warning";
   }
 
   return "normal";
@@ -3441,9 +3434,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
                                             : taskDueTone === "today"
                                               ? "text-slate-700 hover:border-emerald-300 dark:text-slate-200 dark:hover:border-emerald-400"
-                                              : taskDueTone === "warning"
-                                              ? "text-slate-700 hover:border-amber-300 dark:text-slate-200 dark:hover:border-amber-400"
-                                            : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
+                                              : "text-slate-700 hover:border-slate-300 dark:text-slate-200 dark:hover:border-slate-500"
                                       : "text-slate-700 dark:text-slate-200",
                                     isDependentTask
                                       ? "ring-1 ring-violet-300/85 dark:ring-violet-500/75"
@@ -3498,8 +3489,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         ? "text-amber-700 dark:text-amber-300"
                                         : taskDueTone === "today"
                                           ? "text-emerald-700 dark:text-emerald-300"
-                                          : taskDueTone === "warning"
-                                          ? "text-amber-700 dark:text-amber-300"
                                           : ""
                                     )}
                                   >
@@ -3766,10 +3755,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                         ? canUseHoverInteractions
                                           ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
                                           : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
-                                      : dueTone === "warning"
-                                        ? canUseHoverInteractions
-                                          ? "border-amber-200 bg-amber-100 hover:border-amber-300 dark:border-amber-500/55 dark:bg-amber-950 dark:hover:border-amber-400"
-                                          : "border-amber-200 bg-amber-100 dark:border-amber-500/55 dark:bg-amber-950"
                                         : canUseHoverInteractions
                                           ? "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-slate-500"
                                           : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/90"
@@ -3837,9 +3822,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                             ? "text-slate-500 line-through dark:text-slate-400"
                                             : dueTone === "overdue"
                                               ? "text-amber-700 dark:text-amber-300"
-                                              : dueTone === "warning"
-                                                ? "text-amber-700 dark:text-amber-300"
-                                                : "text-slate-900 dark:text-slate-100"
+                                              : "text-slate-900 dark:text-slate-100"
                                         )}
                                       >
                                         {isExpanded ? (
@@ -3850,9 +3833,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                 ? "text-slate-500 line-through dark:text-slate-400"
                                                 : dueTone === "overdue"
                                                   ? "text-amber-700 dark:text-amber-300"
-                                                  : dueTone === "warning"
-                                                    ? "text-amber-700 dark:text-amber-300"
-                                                    : "text-slate-900 dark:text-slate-100"
+                                                  : "text-slate-900 dark:text-slate-100"
                                             )}
                                             rows={1}
                                             value={draftTitle}
@@ -3891,9 +3872,7 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                 ? "text-slate-500 line-through dark:text-slate-400"
                                                 : dueTone === "overdue"
                                                   ? "text-amber-700 dark:text-amber-300"
-                                                  : dueTone === "warning"
-                                                    ? "text-amber-700 dark:text-amber-300"
-                                                    : "text-slate-900 dark:text-slate-100"
+                                                  : "text-slate-900 dark:text-slate-100"
                                             )}
                                           >
                                             {task.title}
@@ -3979,8 +3958,6 @@ export function WorkspaceCanvas({ workspace }: WorkspaceCanvasProps): React.Reac
                                                 ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
                                                 : dueTone === "today"
                                                   ? "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-900/55 dark:text-emerald-100"
-                                                : dueTone === "warning"
-                                                  ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/55 dark:bg-amber-900/55 dark:text-amber-100"
                                                   : "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
                                             )}
                                             onClick={(event) => {
